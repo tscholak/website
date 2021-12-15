@@ -1,0 +1,41 @@
+cabal-version:  2.4
+
+name:           tscholak-website
+version:        0.1.0.0
+synopsis:       Torsten Scholak's website
+description:    Torsten Scholak's website
+category:       website
+homepage:       https://github.com/tscholak/website#readme
+bug-reports:    https://github.com/tscholak/website
+author:         Torsten Scholak
+maintainer:     torsten.scholak@googlemail.com
+copyright:      2021 Torsten Scholak
+license:        BSD3
+license-file:   LICENSE
+build-type:     Simple
+
+source-repository head
+  type: git
+  location: https://github.com/tscholak/website
+
+executable website
+  main-is: Main.hs
+  other-modules:
+  hs-source-dirs:
+      app
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N -Wall
+  build-depends:
+      aeson
+    , base >=4.7 && <5
+    , containers
+    , lens
+    , lens-aeson
+    , pandoc
+    , pandoc-types
+    , shake
+    , slick
+    , split
+    , text
+    , time
+    , unordered-containers
+  default-language: GHC2021
