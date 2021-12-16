@@ -1,6 +1,6 @@
 cabal-version:  2.4
 
-name:           tscholak-website
+name:           website
 version:        0.1.0.0
 synopsis:       Torsten Scholak's website
 description:    Torsten Scholak's website
@@ -10,7 +10,7 @@ bug-reports:    https://github.com/tscholak/website
 author:         Torsten Scholak
 maintainer:     torsten.scholak@googlemail.com
 copyright:      2021 Torsten Scholak
-license:        BSD3
+license:        BSD-3-Clause
 license-file:   LICENSE
 build-type:     Simple
 

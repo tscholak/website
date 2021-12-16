@@ -24,7 +24,7 @@
     };
   };
 
-  outputs = { self, nixpkgs, haskell-nix, utils, iohkNix, tokenizers, ... }:
+  outputs = { self, nixpkgs, haskell-nix, utils, iohkNix, ... }:
     let
       inherit (nixpkgs) lib;
       inherit (lib) mapAttrs getAttrs attrNames;
