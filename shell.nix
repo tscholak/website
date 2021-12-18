@@ -7,7 +7,7 @@ let
   shell = pkgs.website-project.shellFor {
     name = "website-dev-shell";
     tools = {
-      # cabal = "latest";
+      cabal = "latest";
       # haskell-language-server = "latest";
     };
     exactDeps = true;
