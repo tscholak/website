@@ -165,26 +165,6 @@
         "type": "github"
       }
     },
-    "iohkNix": {
-      "inputs": {
-        "nixpkgs": [
-          "nixpkgs"
-        ]
-      },
-      "locked": {
-        "lastModified": 1633964277,
-        "narHash": "sha256-7G/BK514WiMRr90EswNBthe8SmH9tjPaTBba/RW/VA8=",
-        "owner": "input-output-hk",
-        "repo": "iohk-nix",
-        "rev": "1e51437aac8a0e49663cb21e781f34163c81ebfb",
-        "type": "github"
-      },
-      "original": {
-        "owner": "input-output-hk",
-        "repo": "iohk-nix",
-        "type": "github"
-      }
-    },
     "nix-tools": {
       "flake": false,
       "locked": {
@@ -285,7 +265,6 @@
     "root": {
       "inputs": {
         "haskell-nix": "haskell-nix",
-        "iohkNix": "iohkNix",
         "nixpkgs": [
           "haskell-nix",
           "nixpkgs-unstable"

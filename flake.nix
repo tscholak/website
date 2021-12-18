@@ -18,103 +18,39 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     utils.follows = "haskell-nix/flake-utils";
-    iohkNix = {
-      url = "github:input-output-hk/iohk-nix";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
   };
 
-  outputs = { self, nixpkgs, haskell-nix, utils, iohkNix, ... }:
-    let
-      inherit (nixpkgs) lib;
-      inherit (lib) mapAttrs getAttrs attrNames;
-      inherit (utils.lib) eachSystem;
-      inherit (iohkNix.lib) prefixNamesWith collectExes;
-
-      supportedSystems = ["x86_64-linux" "x86_64-darwin"];
-
-      gitrev = self.rev or "dirty";
-
-      overlays = [
-        haskell-nix.overlay
-        iohkNix.overlays.haskell-nix-extra
-
-        (final: prev: {
-          inherit gitrev;
-          commonLib = lib
-            // iohkNix.lib;
-        })
-
-        (final: prev: {
-          website-project =
-            let
-              src = final.haskell-nix.haskellLib.cleanGit {
-                name = "website";
-                src = ./.;
-              };
-              compiler-nix-name = "ghc921";
-              projectPackages = lib.attrNames (final.haskell-nix.haskellLib.selectProjectPackages
-                (final.haskell-nix.cabalProject' {
-                  inherit src compiler-nix-name;
-                }).hsPkgs);
-            in
-              final.haskell-nix.cabalProject' {
-                inherit src compiler-nix-name;
-
-                modules = [
-                  {
-                    packages.website.enableExecutableProfiling = true;
-                    enableLibraryProfiling = true;
-                  }
-
-                  (lib.optionalAttrs final.stdenv.hostPlatform.isMusl (let
-                    fullyStaticOptions = {
-                      enableShared = false;
-                      enableStatic = true;
-                      dontStrip = false;
-                    };
-                  in
-                    {
-                      packages = lib.genAttrs projectPackages (name: fullyStaticOptions);
-                      doHaddock = false;
-                    }
-                  ))
-                ];
-              };
-        })
-      ];
-
-    in eachSystem supportedSystems (system:
+  outputs = { self, nixpkgs, haskell-nix, utils, ... }:
+    utils.lib.eachSystem [ "x86_64-darwin" ] (system:
       let
-        pkgs = import nixpkgs { inherit system overlays; };
+        pkgs = haskell-nix.legacyPackages.${system};
+        hsPkgs = pkgs.haskellPackages;
 
-        inherit (pkgs.commonLib) eachEnv environments;
+        haskellNix = pkgs.haskell-nix.cabalProject {
+          src = pkgs.haskell-nix.haskellLib.cleanGit {
+            name = "website";
+            src = ./.;
+          };
+          compiler-nix-name = "ghc8107";
+        };
 
-        devShell =  pkgs.callPackage ./shell.nix {};
+        website = haskellNix.website.components.exes.website;
+      in {
+        packages.website = website;
 
-        flake = pkgs.website-project.flake {};
+        devShell = haskellNix.shellFor {
+          packages = p: [ p.website ];
+          withHoogle = false;
+          tools = {
+            cabal = "latest";
+            haskell-language-server = "latest";
+          };
+          nativeBuildInputs = [
+            haskellNix.website.project.roots
+          ];
+          exactDeps = true;
+        };
 
-        staticFlake = pkgs.pkgsCross.musl64.website-project.flake {};
-
-        exes = collectExes flake.packages;
-        exeNames = attrNames exes;
-        lazyCollectExe = p: getAttrs exeNames (collectExes p);
-
-        packages = {
-          inherit (pkgs) website;
-        }
-        // exes
-        // (prefixNamesWith "static/"
-              (mapAttrs pkgs.rewriteStatic (lazyCollectExe staticFlake.packages)));
-
-      in lib.recursiveUpdate flake {
-        inherit environments packages;
-
-        defaultPackage = flake.packages."website:exe:website";
-
-        defaultApp = utils.lib.mkApp { drv = flake.packages."website:exe:website"; };
-
-        inherit devShell;
-      }
-    );
+        defaultPackage = website;
+      });
 }
