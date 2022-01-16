@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+{{>site/templates/head.html}}
+
+<body>
+    {{>site/templates/header.html}}
+
+    <div id="page">
+        <h1>Blog Posts</h1>
+
+        <p>An RSS feed of my blog posts is available at <a href="feed.xml">feed.xml</a>.</p>
+
+        <section class="table-of-contents">
+            {{>site/templates/post-list.html}}
+        </section>
+    </div>
+
+    {{>site/templates/footer.html}}
+</body>
+
+</html>

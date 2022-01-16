@@ -1,3 +1,4 @@
+.DS_STORE
 dist
 dist-*
 cabal-dev
@@ -21,3 +22,5 @@ cabal.project.local
 cabal.project.local~
 .HTF/
 .ghc.environment.*
+.shake
+build/

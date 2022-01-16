@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+{{>site/templates/head.html}}
+
+<body>
+    {{>site/templates/header.html}}
+
+    <div id="page">
+        <section class="table-of-contents">
+            <div class="tag-info">
+                <span class="doctype">Tag</span> —&nbsp;<span class="postcount">{{}} Articles </span>
+            </div>
+            <h1 class="title">{{tag}}</h1>
+            {{>site/templates/post-list.html}}
+        </section>
+    </div>
+
+    {{>site/templates/footer.html}}
+</body>
+
+</html>

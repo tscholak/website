@@ -47,6 +47,7 @@
           };
           nativeBuildInputs = [
             haskellNix.website.project.roots
+            pkgs.nodePackages.serve
           ];
           exactDeps = true;
         };

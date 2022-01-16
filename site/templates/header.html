@@ -1,0 +1,51 @@
+<header>
+    <nav class="smallHide">
+        <a {{#homePage}}class="current-tab" {{/homePage}} href="/">
+            <div id="home-text"> Home </div>
+        </a>
+        <a {{#postsPage}}class="current-tab" {{/postsPage}} href="/posts">
+            <div id="home-text"> Posts </div>
+        </a>
+        <a {{#tagsPage}}class="current-tab" {{/tagsPage}} href="/tags">
+            <div id="home-text"> Tags </div>
+        </a>
+        <a {{#aboutPage}}class="current-tab" {{/aboutPage}} href="/about">
+            <div id="home-text"> About </div>
+        </a>
+    </nav>
+    <div id="menu" class="bigHide"><i class="fas fa-bars"></i></div>
+
+    <div class="right-sidebar">
+        <a class="ext-link smallHide" href="feed.xml">
+            <i class="fas fa-rss"></i>
+        </a>
+
+        {{#githubUser}}
+        <a class="ext-link smallHide" href="https://github.com/{{githubUser}}">
+            <i class="fab fa-github"></i>
+        </a>
+        {{/githubUser}}
+
+        {{#twitterHandle}}
+        <a class="ext-link smallHide" href="https://twitter.com/{{twitterHandle}}">
+            <i class="fab fa-twitter"></i>
+        </a>
+        {{/twitterHandle}}
+
+        {{#youtubeHandle}}
+        <a class="ext-link smallHide" href="https://youtube.com/{{youtubeHandle}}">
+            <i class="fab fa-youtube"></i>
+        </a>
+        {{/youtubeHandle}}
+
+        {{#twitchHandle}}
+        <a class="ext-link smallHide" href="https://twitch.com/{{twitchHandle}}">
+            <i class="fab fa-twitch"></i>
+        </a>
+        {{/twitchHandle}}
+        
+        <div id="theme-button" class="smallHide">
+            <i class="fas fa-adjust"></i>
+        </div>
+    </div>
+</header>
