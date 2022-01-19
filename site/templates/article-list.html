@@ -1,0 +1,11 @@
+<ul>
+    {{#articles}}
+    <li>
+        <a href="/{{article.url}}">
+            <p> {{kind}} </p>
+            <h1>{{article.title}}</h1>
+            <span class="info">{{article.date}}</span>
+        </a>
+    </li>
+    {{/articles}}
+</ul>
