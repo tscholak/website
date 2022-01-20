@@ -8,8 +8,9 @@
     <div>
         <h1>{{title}}</h1>
         <p>
+            Tagged as:
             {{#tags}}
-            <a href="/tags/{{.}}" class="tag {{.}}">{{.}}</a>
+            <a href="/tags/{{.}}">{{.}}</a>
             {{/tags}}
         </p>
         {{#image}}
@@ -21,26 +22,22 @@
 
     <div>
         {{#prev}}
-        <a href="/{{url}}" class="prev">
-            <div class="arrow">
-                <i class="fas fa-chevron-left"></i>
-            </div>
-            <div class="sample">
-                <h2>{{title}}</h2>
+        <a href="/{{url}}">
+            <div>
+                <h2>Previous Post</h2>
+                <h3>{{title}}</h3>
                 <p>{{teaser}}</p>
                 <date>{{date}}</date>
             </div>
         </a>
         {{/prev}}
         {{#next}}
-        <a href="/{{url}}" class="next">
-            <div class="sample">
-                <h2>{{title}}</h2>
+        <a href="/{{url}}">
+            <div>
+                <h2>Next Post</h2>
+                <h3>{{title}}</h3>
                 <p>{{teaser}}</p>
                 <date>{{date}}</date>
-            </div>
-            <div class="arrow">
-                <i class="fas fa-chevron-right"></i>
             </div>
         </a>
         {{/next}}

@@ -6,41 +6,65 @@
     {{>site/templates/header.html}}
 
     <div>
-        <h1>{{title}}</h1>
-        <p>
-            {{#tags}}
-            <a href="/tags/{{.}}" class="tag {{.}}">{{.}}</a>
-            {{/tags}}
-        </p>
         {{#image}}
         <p><img src="/images/{{image}}"></p>
         {{/image}}
-        <p>{{date}}, {{readTime}} min read</p>
+        <h1>{{title}}</h1>
+        <p>
+            <div id="csl">
+                {{#author}}
+                <span>{{.}}</span>
+                {{/author}}
+            </div>
+        </p>
+        <p><em>{{journal}}</em></p>
+        <p>{{date}}</p>
+        <p><a href="{{link}}">{{link}}</a></p>
+        <p>
+            {{#pdf}}
+            <a href="{{pdf}}">PDF</a>
+            {{/pdf}}
+            {{#code}}
+            <a href="{{code}}">Code</a>
+            {{/code}}
+            {{#talk}}
+            <a href="{{talk}}">Talk</a>
+            {{/talk}}
+            {{#slides}}
+            <a href="{{slides}}">Slides</a>
+            {{/slides}}
+            {{#poster}}
+            <a href="{{poster}}">Poster</a>
+            {{/poster}}
+        </p>
+        <p>
+            Tagged as:
+            {{#tags}}
+            <a href="/tags/{{.}}">{{.}}</a>
+            {{/tags}}
+        </p>
+        <p>TL;DR: {{tldr}}</p>
         {{{content}}}
     </div>
 
     <div>
         {{#prev}}
-        <a href="/{{url}}" class="prev">
-            <div class="arrow">
-                <i class="fas fa-chevron-left"></i>
-            </div>
-            <div class="sample">
-                <h2>{{title}}</h2>
+        <a href="/{{url}}">
+            <div>
+                <h2>Previous Publication</h2>
+                <h3>{{title}}</h3>
                 <p>{{tldr}}</p>
                 <date>{{date}}</date>
             </div>
         </a>
         {{/prev}}
         {{#next}}
-        <a href="/{{url}}" class="next">
-            <div class="sample">
-                <h2>{{title}}</h2>
+        <a href="/{{url}}">
+            <div>
+                <h2>Next Publication</h2>
+                <h3>{{title}}</h3>
                 <p>{{tldr}}</p>
                 <date>{{date}}</date>
-            </div>
-            <div class="arrow">
-                <i class="fas fa-chevron-right"></i>
             </div>
         </a>
         {{/next}}

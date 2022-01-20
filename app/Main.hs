@@ -32,13 +32,14 @@ import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Time (UTCTime, defaultTimeLocale, formatTime, getCurrentTime, iso8601DateFormat, parseTimeOrError)
-import Debug.Trace (traceShowId)
 import Development.Shake (Action, ShakeOptions (..), copyFileChanged, forP, getDirectoryFiles, readFile', shakeOptions, writeFile', pattern Chatty)
 import Development.Shake.Classes (Binary (..))
 import Development.Shake.FilePath (dropDirectory1, (-<.>), (</>))
 import Development.Shake.Forward (cacheAction, shakeArgsForward)
 import GHC.Generics (Generic)
-import Slick (compileTemplate', convert, markdownToHTML, substitute)
+import Slick (compileTemplate', convert, substitute)
+import Slick.Pandoc (defaultHtml5Options, markdownToHTMLWithOpts)
+import qualified Text.Pandoc as P
 
 -- | site meta data
 -- TODO: move to config file
@@ -59,6 +60,26 @@ siteMeta =
 -- | the output directory
 outputFolder :: FilePath
 outputFolder = "build/"
+
+-- | markdown options
+markdownOptions :: P.ReaderOptions
+markdownOptions =
+  P.def {P.readerExtensions = pandocExtensions}
+  where
+    pandocExtensions =
+      P.disableExtension P.Ext_autolink_bare_uris $
+        mconcat
+          [ P.extensionsFromList
+              [ P.Ext_yaml_metadata_block,
+                P.Ext_fenced_code_attributes,
+                P.Ext_auto_identifiers
+              ],
+            P.githubMarkdownExtensions
+          ]
+
+-- | convert markdown to html
+markdownToHTML :: Text -> Action Value
+markdownToHTML = markdownToHTMLWithOpts markdownOptions defaultHtml5Options
 
 -- | add site meta to a JSON object
 withSiteMeta :: Value -> Value
@@ -117,7 +138,7 @@ data Article kind where
     Article 'BlogPostKind
   Publication ::
     { _pubTitle :: String,
-      _pubAuthor :: String,
+      _pubAuthor :: [String],
       _pubJournal :: String,
       _pubContent :: String,
       _pubURL :: String,
@@ -125,10 +146,11 @@ data Article kind where
       _pubTagNames :: [TagName],
       _pubTldr :: String,
       _pubImage :: Maybe String,
-      _pubLink :: Maybe String,
+      _pubLink :: String,
       _pubPDF :: Maybe String,
       _pubCode :: Maybe String,
       _pubTalk :: Maybe String,
+      _pubSlides :: Maybe String,
       _pubPoster :: Maybe String,
       _pubPrev :: Maybe (Article 'PublicationKind),
       _pubNext :: Maybe (Article 'PublicationKind)
@@ -148,8 +170,8 @@ instance Binary (Article 'BlogPostKind) where
   get = BlogPost <$> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get
 
 instance Binary (Article 'PublicationKind) where
-  put Publication {..} = put _pubTitle >> put _pubAuthor >> put _pubJournal >> put _pubContent >> put _pubURL >> put _pubDate >> put _pubTagNames >> put _pubTldr >> put _pubImage >> put _pubLink >> put _pubPDF >> put _pubCode >> put _pubTalk >> put _pubPoster >> put _pubPrev >> put _pubNext
-  get = Publication <$> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get
+  put Publication {..} = put _pubTitle >> put _pubAuthor >> put _pubJournal >> put _pubContent >> put _pubURL >> put _pubDate >> put _pubTagNames >> put _pubTldr >> put _pubImage >> put _pubLink >> put _pubPDF >> put _pubCode >> put _pubTalk >> put _pubSlides >> put _pubPoster >> put _pubPrev >> put _pubNext
+  get = Publication <$> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get
 
 instance ToJSON (Article 'BlogPostKind) where
   toJSON BlogPost {..} =
@@ -182,6 +204,7 @@ instance ToJSON (Article 'PublicationKind) where
         "pdf" A..= _pubPDF,
         "code" A..= _pubCode,
         "talk" A..= _pubTalk,
+        "slides" A..= _pubSlides,
         "poster" A..= _pubPoster,
         "prev" A..= _pubPrev,
         "next" A..= _pubNext
@@ -215,10 +238,11 @@ instance FromJSON (Article 'PublicationKind) where
         A..: "tags" <*> o
         A..: "tldr" <*> o
         A..:? "image" <*> o
-        A..:? "link" <*> o
+        A..: "link" <*> o
         A..:? "pdf" <*> o
         A..:? "code" <*> o
         A..:? "talk" <*> o
+        A..:? "slides" <*> o
         A..:? "poster" <*> o
         A..:? "prev" <*> o
         A..:? "next"

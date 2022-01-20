@@ -66,6 +66,7 @@ h3::before {
 }
 
 img {
+  max-width: 100%;
   border: 0;
 }
 
@@ -166,4 +167,8 @@ code {
 
 pre > code {
   font-weight: normal;
+}
+
+#csl span:not(:last-of-type)::after {
+  content: ", ";
 }
