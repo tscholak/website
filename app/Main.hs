@@ -32,6 +32,7 @@ import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Time (UTCTime, defaultTimeLocale, formatTime, getCurrentTime, iso8601DateFormat, parseTimeOrError)
+import Debug.Trace (traceShowId)
 import Development.Shake (Action, ShakeOptions (..), copyFileChanged, forP, getDirectoryFiles, readFile', shakeOptions, writeFile', pattern Chatty)
 import Development.Shake.Classes (Binary (..))
 import Development.Shake.FilePath (dropDirectory1, (-<.>), (</>))
@@ -309,11 +310,16 @@ data FeedData = FeedData
 
 -- | build landing page
 buildIndex :: Action ()
-buildIndex = do
+buildIndex = cacheAction ("build" :: Text, indexSrcPath) $ do
+  indexContent <- readFile' indexSrcPath
+  indexData <- markdownToHTML . Text.pack $ indexContent
   indexTemplate <- compileTemplate' "site/templates/index.html"
-  let indexData = withSiteMeta $ toJSON siteMeta
-      indexHTML = Text.unpack $ substitute indexTemplate indexData
+  let fullIndexData = withSiteMeta indexData
+      indexHTML = Text.unpack $ substitute indexTemplate fullIndexData
   writeFile' (outputFolder </> "index.html") indexHTML
+  where
+    indexSrcPath :: FilePath
+    indexSrcPath = "site/home.md"
 
 -- | find and build all blog posts
 buildBlogPostList :: Action [Article 'BlogPostKind]
