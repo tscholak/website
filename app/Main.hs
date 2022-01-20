@@ -13,22 +13,23 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module Main where
 
-import Control.Lens (at, makeLenses, (?~), (^?))
+import Control.Lens (at, (?~), (^?))
 import Control.Monad (void)
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import Data.Aeson as A (FromJSON (parseJSON), KeyValue ((.=)), ToJSON (toJSON), Value (Object, String), object, withObject, (.:), (.:?))
 import Data.Aeson.Lens (AsPrimitive (_String), AsValue (_Object), key, pattern Integer)
 import qualified Data.HashMap.Lazy as HML
+import Data.List (sortOn)
 import Data.Map.Lazy (Map)
 import qualified Data.Map.Lazy as Map
 import Data.Maybe (fromMaybe)
+import Data.Ord (Down (Down))
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Time (UTCTime, defaultTimeLocale, formatTime, getCurrentTime, iso8601DateFormat, parseTimeOrError)
@@ -81,6 +82,13 @@ markdownOptions =
 markdownToHTML :: Text -> Action Value
 markdownToHTML = markdownToHTMLWithOpts markdownOptions defaultHtml5Options
 
+-- | convert literal Haskell code to html
+codeToHTML :: Text -> Action Value
+codeToHTML = markdownToHTMLWithOpts opts defaultHtml5Options
+  where
+    opts = P.def {P.readerExtensions = pandocExtensions}
+    pandocExtensions = P.extensionsFromList [P.Ext_literate_haskell]
+
 -- | add site meta to a JSON object
 withSiteMeta :: Value -> Value
 withSiteMeta (Object obj) = Object $ HML.union obj siteMetaObj
@@ -124,40 +132,38 @@ articleKind Publication {} = PublicationKind
 
 data Article kind where
   BlogPost ::
-    { _bpTitle :: String,
-      _bpContent :: String,
-      _bpURL :: String,
-      _bpDate :: String,
-      _bpTagNames :: [TagName],
-      _bpTeaser :: String,
-      _bpReadTime :: Int,
-      _bpImage :: Maybe String,
-      _bpPrev :: Maybe (Article 'BlogPostKind),
-      _bpNext :: Maybe (Article 'BlogPostKind)
+    { bpTitle :: String,
+      bpContent :: String,
+      bpURL :: String,
+      bpDate :: String,
+      bpTagNames :: [TagName],
+      bpTeaser :: String,
+      bpReadTime :: Int,
+      bpImage :: Maybe String,
+      bpPrev :: Maybe (Article 'BlogPostKind),
+      bpNext :: Maybe (Article 'BlogPostKind)
     } ->
     Article 'BlogPostKind
   Publication ::
-    { _pubTitle :: String,
-      _pubAuthor :: [String],
-      _pubJournal :: String,
-      _pubContent :: String,
-      _pubURL :: String,
-      _pubDate :: String,
-      _pubTagNames :: [TagName],
-      _pubTldr :: String,
-      _pubImage :: Maybe String,
-      _pubLink :: String,
-      _pubPDF :: Maybe String,
-      _pubCode :: Maybe String,
-      _pubTalk :: Maybe String,
-      _pubSlides :: Maybe String,
-      _pubPoster :: Maybe String,
-      _pubPrev :: Maybe (Article 'PublicationKind),
-      _pubNext :: Maybe (Article 'PublicationKind)
+    { pubTitle :: String,
+      pubAuthor :: [String],
+      pubJournal :: String,
+      pubContent :: String,
+      pubURL :: String,
+      pubDate :: String,
+      pubTagNames :: [TagName],
+      pubTldr :: String,
+      pubImage :: Maybe String,
+      pubLink :: String,
+      pubPDF :: Maybe String,
+      pubCode :: Maybe String,
+      pubTalk :: Maybe String,
+      pubSlides :: Maybe String,
+      pubPoster :: Maybe String,
+      pubPrev :: Maybe (Article 'PublicationKind),
+      pubNext :: Maybe (Article 'PublicationKind)
     } ->
     Article 'PublicationKind
-
-$(makeLenses ''Article)
 
 deriving stock instance Eq (Article kind)
 
@@ -166,48 +172,48 @@ deriving stock instance Ord (Article kind)
 deriving stock instance Show (Article kind)
 
 instance Binary (Article 'BlogPostKind) where
-  put BlogPost {..} = put _bpTitle >> put _bpContent >> put _bpURL >> put _bpDate >> put _bpTagNames >> put _bpTeaser >> put _bpReadTime >> put _bpImage >> put _bpPrev >> put _bpNext
+  put BlogPost {..} = put bpTitle >> put bpContent >> put bpURL >> put bpDate >> put bpTagNames >> put bpTeaser >> put bpReadTime >> put bpImage >> put bpPrev >> put bpNext
   get = BlogPost <$> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get
 
 instance Binary (Article 'PublicationKind) where
-  put Publication {..} = put _pubTitle >> put _pubAuthor >> put _pubJournal >> put _pubContent >> put _pubURL >> put _pubDate >> put _pubTagNames >> put _pubTldr >> put _pubImage >> put _pubLink >> put _pubPDF >> put _pubCode >> put _pubTalk >> put _pubSlides >> put _pubPoster >> put _pubPrev >> put _pubNext
+  put Publication {..} = put pubTitle >> put pubAuthor >> put pubJournal >> put pubContent >> put pubURL >> put pubDate >> put pubTagNames >> put pubTldr >> put pubImage >> put pubLink >> put pubPDF >> put pubCode >> put pubTalk >> put pubSlides >> put pubPoster >> put pubPrev >> put pubNext
   get = Publication <$> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get
 
 instance ToJSON (Article 'BlogPostKind) where
   toJSON BlogPost {..} =
     object
-      [ "title" A..= _bpTitle,
-        "content" A..= _bpContent,
-        "url" A..= _bpURL,
-        "date" A..= _bpDate,
-        "tags" A..= _bpTagNames,
-        "teaser" A..= _bpTeaser,
-        "readTime" A..= _bpReadTime,
-        "image" A..= _bpImage,
-        "prev" A..= _bpPrev,
-        "next" A..= _bpNext
+      [ "title" A..= bpTitle,
+        "content" A..= bpContent,
+        "url" A..= bpURL,
+        "date" A..= bpDate,
+        "tags" A..= bpTagNames,
+        "teaser" A..= bpTeaser,
+        "readTime" A..= bpReadTime,
+        "image" A..= bpImage,
+        "prev" A..= bpPrev,
+        "next" A..= bpNext
       ]
 
 instance ToJSON (Article 'PublicationKind) where
   toJSON Publication {..} =
     object
-      [ "title" A..= _pubTitle,
-        "author" A..= _pubAuthor,
-        "journal" A..= _pubJournal,
-        "content" A..= _pubContent,
-        "url" A..= _pubURL,
-        "date" A..= _pubDate,
-        "tags" A..= _pubTagNames,
-        "tldr" A..= _pubTldr,
-        "image" A..= _pubImage,
-        "link" A..= _pubLink,
-        "pdf" A..= _pubPDF,
-        "code" A..= _pubCode,
-        "talk" A..= _pubTalk,
-        "slides" A..= _pubSlides,
-        "poster" A..= _pubPoster,
-        "prev" A..= _pubPrev,
-        "next" A..= _pubNext
+      [ "title" A..= pubTitle,
+        "author" A..= pubAuthor,
+        "journal" A..= pubJournal,
+        "content" A..= pubContent,
+        "url" A..= pubURL,
+        "date" A..= pubDate,
+        "tags" A..= pubTagNames,
+        "tldr" A..= pubTldr,
+        "image" A..= pubImage,
+        "link" A..= pubLink,
+        "pdf" A..= pubPDF,
+        "code" A..= pubCode,
+        "talk" A..= pubTalk,
+        "slides" A..= pubSlides,
+        "poster" A..= pubPoster,
+        "prev" A..= pubPrev,
+        "next" A..= pubNext
       ]
 
 instance FromJSON (Article 'BlogPostKind) where
@@ -355,7 +361,8 @@ buildBlogPostList = do
 buildBlogPosts :: [Article 'BlogPostKind] -> Action ()
 buildBlogPosts articles = do
   blogPostsTemplate <- compileTemplate' "site/templates/posts.html"
-  let blogPostsInfo = ArticlesInfo {articles}
+  let sortedArticles = sortOn (Down . parseDate . bpDate) articles
+      blogPostsInfo = ArticlesInfo {articles = sortedArticles}
       blogPostsHTML = Text.unpack $ substitute blogPostsTemplate (withSiteMeta $ toJSON blogPostsInfo)
   writeFile' (outputFolder </> "posts.html") blogPostsHTML
 
@@ -383,7 +390,8 @@ buildPublicationList = do
 buildPublications :: [Article 'PublicationKind] -> Action ()
 buildPublications articles = do
   publicationsTemplate <- compileTemplate' "site/templates/publications.html"
-  let publicationsInfo = ArticlesInfo {articles}
+  let sortedArticles = sortOn (Down . parseDate . pubDate) articles
+      publicationsInfo = ArticlesInfo {articles = sortedArticles}
       publicationsHTML = Text.unpack $ substitute publicationsTemplate (withSiteMeta $ toJSON publicationsInfo)
   writeFile' (outputFolder </> "publications.html") publicationsHTML
 
@@ -401,19 +409,22 @@ buildPublication publicationSrcPath = cacheAction ("build" :: Text, publicationS
 
 -- | find all tags and build tag pages
 buildTagList :: [SomeArticle] -> Action [Tag]
-buildTagList articles = do
-  let tags :: Map TagName [SomeArticle] = Map.unionsWith (<>) ((`withSomeArticle` collectTags) <$> articles)
+buildTagList articles =
   forP (Map.toList tags) (buildTag . mkTag)
   where
+    tags = Map.unionsWith (<>) ((`withSomeArticle` collectTags) <$> articles)
     collectTags :: forall kind. Article kind -> Map TagName [SomeArticle]
-    collectTags post@BlogPost {_bpTagNames} = Map.fromList $ (,pure $ SomeArticle post) <$> _bpTagNames
-    collectTags publication@Publication {_pubTagNames} = Map.fromList $ (,pure $ SomeArticle publication) <$> _pubTagNames
+    collectTags post@BlogPost {bpTagNames} = Map.fromList $ (,pure $ SomeArticle post) <$> bpTagNames
+    collectTags publication@Publication {pubTagNames} = Map.fromList $ (,pure $ SomeArticle publication) <$> pubTagNames
     mkTag (tagName@(TagName name), articles') =
       Tag
         { name = tagName,
-          articles = articles',
+          articles = sortOn (`withSomeArticle` comp) articles',
           url = "tags/" <> name <> ".html"
         }
+    comp :: forall kind. Article kind -> Down UTCTime
+    comp Publication {..} = Down . parseDate $ pubDate
+    comp BlogPost {..} = Down . parseDate $ bpDate
 
 -- | build tags page
 buildTags :: [Tag] -> Action ()
@@ -442,11 +453,16 @@ calcReadTime = fromIntegral . uncurry roundUp . flip divMod 200 . length . words
 
 -- | build about page
 buildAbout :: Action ()
-buildAbout = do
+buildAbout = cacheAction ("build" :: Text, aboutSrcPath) $ do
+  aboutContent <- readFile' aboutSrcPath
+  aboutData <- codeToHTML . Text.pack $ aboutContent
   aboutTemplate <- compileTemplate' "site/templates/about.html"
-  let aboutData = withSiteMeta $ toJSON siteMeta
-      aboutHTML = Text.unpack $ substitute aboutTemplate aboutData
+  let fullAboutData = withSiteMeta aboutData
+      aboutHTML = Text.unpack $ substitute aboutTemplate fullAboutData
   writeFile' (outputFolder </> "about.html") aboutHTML
+  where
+    aboutSrcPath :: FilePath
+    aboutSrcPath = "site/about.lhs"
 
 -- | copy all static files
 copyStaticFiles :: Action ()
@@ -457,18 +473,23 @@ copyStaticFiles = do
       let dest = outputFolder </> dropDirectory1 src
       copyFileChanged src dest
 
+-- | parse human-readable date from an article
+parseDate :: String -> UTCTime
+parseDate = parseTimeOrError True defaultTimeLocale "%b %e, %Y"
+
 -- | format a date in ISO 8601 format
 formatDate :: String -> String
-formatDate humanDate = toIsoDate parsedTime
-  where
-    parsedTime = parseTimeOrError True defaultTimeLocale "%b %e, %Y" humanDate
+formatDate = toIsoDate . parseDate
 
+-- | RFC 3339 date format
 rfc3339 :: Maybe String
 rfc3339 = Just "%H:%M:SZ"
 
+-- | convert UTC time to RFC 3339 format
 toIsoDate :: UTCTime -> String
 toIsoDate = formatTime defaultTimeLocale (iso8601DateFormat rfc3339)
 
+-- | build feed
 buildFeed :: [SomeArticle] -> Action ()
 buildFeed articles = do
   now <- liftIO getCurrentTime
@@ -485,9 +506,10 @@ buildFeed articles = do
   writeFile' (outputFolder </> "feed.xml") . Text.unpack $ substitute feedTemplate (toJSON feedData)
   where
     toFeedPost :: forall kind. Article kind -> SomeArticle
-    toFeedPost p@BlogPost {..} = SomeArticle $ p {_bpDate = formatDate _bpDate}
-    toFeedPost p@Publication {..} = SomeArticle $ p {_pubDate = formatDate _pubDate}
+    toFeedPost p@BlogPost {..} = SomeArticle $ p {bpDate = formatDate bpDate}
+    toFeedPost p@Publication {..} = SomeArticle $ p {pubDate = formatDate pubDate}
 
+-- | build site using all actions
 buildRules :: Action ()
 buildRules = do
   buildIndex
@@ -502,6 +524,7 @@ buildRules = do
   copyStaticFiles
   buildFeed articles
 
+-- | main program
 main :: IO ()
 main = do
   let options = shakeOptions {shakeVerbosity = Chatty, shakeLintInside = ["\\"]}

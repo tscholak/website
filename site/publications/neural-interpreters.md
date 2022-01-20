@@ -5,7 +5,7 @@ author:
 - Jonathan Pilault
 - Joey Velez-Ginorio
 journal: "arXiv:2112.04630 [cs.CL]"
-date: Jan 1, 2021
+date: Dec 9, 2021
 tldr: "Are neural models bad at interpreting programs? For the AIPLANS NeurIPS workshop in 2021, we created a dataset of functional programs, and trained T5 to reduce them to their normal forms. Turns out it works even for challenging data splits!"
 image: neural-interpreters.png
 tags: [research]

@@ -7,7 +7,13 @@
 
     <div>
         <h1>Tags</h1>
-        {{>site/templates/tag-list.html}}
+        <p>
+            Blog posts and publications on this site are tagged with keywords.
+            Click on a tag to see all articles tagged with that tag.
+        </p>
+        <ul>
+            {{>site/templates/tag-list.html}}
+        </ul>
     </div>
 
     {{>site/templates/footer.html}}

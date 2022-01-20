@@ -6,7 +6,7 @@ author:
 - Dzmitry Bahdanau
 journal: "Proceedings of the 2021 Conference on Empirical Methods in Natural Language Processing"
 date: Nov 1, 2021
-tldr: "Introducing PICARD - a simple & effective constrained beam search algorithm for any language model. PICARD helps with generating valid code, which is useful for program synthesis and semantic parsing. We achieve SoTA on both Spider and CoSQL."
+tldr: "Introducing PICARD - a simple and effective constrained beam search algorithm for any language model. PICARD helps with generating valid code, which is useful for program synthesis and semantic parsing. We achieve SoTA on both Spider and CoSQL."
 image: picard.jpg
 tags: [research]
 link: 'https://aclanthology.org/2021.emnlp-main.779'

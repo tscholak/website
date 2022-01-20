@@ -21,8 +21,10 @@ source-repository head
 executable website
   main-is: Main.hs
   other-modules:
+      About
   hs-source-dirs:
       app
+    , site
   ghc-options: -threaded -rtsopts -with-rtsopts=-N -Wall
   build-depends:
       aeson

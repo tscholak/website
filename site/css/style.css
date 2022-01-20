@@ -1,7 +1,8 @@
 :root {
   --bg: rgba(0, 0, 0, 0);
   --prebg: rgba(0, 0, 0, 0);
-  --text: #000000;
+  --text: rgb(0, 0, 0);
+  --pretext: rgba(0, 0, 0);
 }
 
 body {
@@ -12,15 +13,9 @@ body {
   margin: 0px;
   margin-left: auto;
   margin-right: auto;
-  max-width: 65em;
+  max-width: 80ch;
   overflow-y: scroll;
   line-height: 1.4;
-}
-
-#content {
-  width: 90%;
-  margin-left: auto;
-  margin-right: auto;
 }
 
 body > * {
@@ -51,18 +46,6 @@ h3 {
 
 h3::before {
   content: "### ";
-}
-
-#header, #footer {
-  background-color: var(--headerbg);
-  margin: 0;
-}
-
-#header a {
-  font-weight: bold;
-  font-variant: normal;
-  font-family: monospace;
-  border: 0;
 }
 
 img {
@@ -121,7 +104,7 @@ ol {
 }
 
 li {
-  margin-left: 0ex;
+  margin-left: 0;
 }
 
 blockquote {
@@ -156,13 +139,15 @@ h1>a, h2>a, h3>a:hover {
 
 pre {
   background-color: var(--prebg);
+  color: var(--pretext);
   margin-top: 0;
   margin-bottom: 0;
-  margin-left: 3ex;
+  margin-left: 2ch;
 }
 
 code {
   font-weight: bold;
+  font-family: "PragmataProLiga-Regular", monospace;
 }
 
 pre > code {
