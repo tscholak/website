@@ -5,58 +5,45 @@
 <body>
     {{>site/templates/header.html}}
 
-    <div id="page">
-        <div class="wrapper">
-            <div class="masthead">
-                <div class="tags">
-                    {{#tags}}
-                    <a href="/tags/{{.}}" class="tag {{.}}">{{.}}</a>
-                    {{/tags}}
-                </div>
-                <span class="title">
-                    {{title}}
-                </span>
-                <br>
-                {{#image}}
-                <img class="post-image" src="/images/{{image}}">
-                {{/image}}
-                <br>
-                <div class="metadata">
-                    <span class="published">{{humanDate}} • {{readTime}} min read</span>
-                </div>
+    <div>
+        <h1>{{title}}</h1>
+        <p>
+            {{#tags}}
+            <a href="/tags/{{.}}" class="tag {{.}}">{{.}}</a>
+            {{/tags}}
+        </p>
+        {{#image}}
+        <p><img src="/images/{{image}}"></p>
+        {{/image}}
+        <p>{{date}}, {{readTime}} min read</p>
+        {{{content}}}
+    </div>
+
+    <div>
+        {{#prev}}
+        <a href="/{{url}}" class="prev">
+            <div class="arrow">
+                <i class="fas fa-chevron-left"></i>
             </div>
-        </div>
-
-        <article class="post">
-            {{{content}}}
-        </article>
-
-        <div class="adjacent">
-            {{#prev}}
-            <a href="/{{url}}" class="prev">
-                <div class="arrow">
-                    <i class="fas fa-chevron-left"></i>
-                </div>
-                <div class="sample">
-                    <h2>{{title}}</h2>
-                    <p>{{teaser}}</p>
-                    <date>{{humanDate}}</date>
-                </div>
-            </a>
-            {{/prev}}
-            {{#next}}
-            <a href="/{{url}}" class="next">
-                <div class="sample">
-                    <h2>{{title}}</h2>
-                    <p>{{teaser}}</p>
-                    <date>{{humanDate}}</date>
-                </div>
-                <div class="arrow">
-                    <i class="fas fa-chevron-right"></i>
-                </div>
-            </a>
-            {{/next}}
-        </div>
+            <div class="sample">
+                <h2>{{title}}</h2>
+                <p>{{teaser}}</p>
+                <date>{{date}}</date>
+            </div>
+        </a>
+        {{/prev}}
+        {{#next}}
+        <a href="/{{url}}" class="next">
+            <div class="sample">
+                <h2>{{title}}</h2>
+                <p>{{teaser}}</p>
+                <date>{{date}}</date>
+            </div>
+            <div class="arrow">
+                <i class="fas fa-chevron-right"></i>
+            </div>
+        </a>
+        {{/next}}
     </div>
 
     {{>site/templates/footer.html}}

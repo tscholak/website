@@ -3,6 +3,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE NamedFieldPuns #-}
@@ -15,7 +16,6 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module Main where
@@ -40,12 +40,15 @@ import GHC.Generics (Generic)
 import Slick (compileTemplate', convert, markdownToHTML, substitute)
 
 -- | site meta data
+-- TODO: move to config file
 siteMeta :: SiteMeta
 siteMeta =
   SiteMeta
-    { siteAuthor = "Torsten Scholak",
-      baseUrl = "https://tscholak.github.io",
+    { baseUrl = "https://tscholak.github.io",
       siteTitle = "Torsten Scholak",
+      siteAuthor = "Torsten Scholak",
+      siteDescription = "Torsten Scholak's personal website",
+      siteKeywords = "Haskell, functional programming",
       twitterHandle = Just "tscholak",
       twitchHandle = Just "tscholak",
       youtubeHandle = Just "tscholak",
@@ -64,9 +67,11 @@ withSiteMeta (Object obj) = Object $ HML.union obj siteMetaObj
 withSiteMeta v = error $ "only add site meta to objects, not " ++ show v
 
 data SiteMeta = SiteMeta
-  { siteAuthor :: String,
-    baseUrl :: String, -- e.g. https://example.ca
+  { baseUrl :: String, -- e.g. https://example.ca
     siteTitle :: String,
+    siteAuthor :: String,
+    siteDescription :: String,
+    siteKeywords :: String,
     twitterHandle :: Maybe String, -- Without @
     twitchHandle :: Maybe String,
     youtubeHandle :: Maybe String,
@@ -416,7 +421,7 @@ buildAbout = do
 -- | copy all static files
 copyStaticFiles :: Action ()
 copyStaticFiles = do
-  staticFilePaths <- getDirectoryFiles "." ["site/images//*", "site/css//*", "site/js//*"]
+  staticFilePaths <- getDirectoryFiles "." ["site/images//*", "site/css//*", "site/js//*", "site/fonts//*"]
   void $
     forP staticFilePaths $ \src -> do
       let dest = outputFolder </> dropDirectory1 src

@@ -1,0 +1,27 @@
+/**
+ * @license
+ * MyFonts Webfont Build ID 4305068, 2022-01-19T22:20:12-0500
+ * 
+ * The fonts listed in this notice are subject to the End User License
+ * Agreement(s) entered into by the website owner. All other parties are 
+ * explicitly restricted from using the Licensed Webfonts(s).
+ * 
+ * You may obtain a valid license at the URLs below.
+ * 
+ * Webfont: PragmataProLiga-Regular by FSD
+ * URL: https://www.myfonts.com/fonts/fsd/pragmata-pro/regular/
+ * Copyright: Copyright (c) 2009 by Fabrizio Schiavi - https://www.fsd.it/. All rights reserved.
+ * 
+ * 
+ * 
+ * © 2022 MyFonts Inc
+*/
+
+
+/* @import must be at top of file, otherwise CSS will not work */
+@import url("//hello.myfonts.net/count/41b0ac");
+  
+@font-face {
+  font-family: "PragmataProLiga-Regular";
+  src: url('/fonts/PragmataProLigaRegular/font.woff2') format('woff2'), url('/fonts/PragmataProLigaRegular/font.woff') format('woff');
+}

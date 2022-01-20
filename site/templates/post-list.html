@@ -1,11 +1,9 @@
-<ul>
-    {{#articles}}
-    <li>
-        <a href="/{{url}}">
-            <h1>{{title}}</h1>
-            <span class="info">{{date}}</span>
-            <p> {{teaser}} </p>
-        </a>
-    </li>
-    {{/articles}}
-</ul>
+{{#articles}}
+<div>
+    <a href="/{{url}}">
+        <h2>{{title}}</h2>
+        <p>{{date}}</p>
+        <p>{{teaser}}</p>
+    </a>
+</div>
+{{/articles}}

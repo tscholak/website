@@ -1,5 +1,32 @@
 <footer>
-    <div>Copyright © 2021 Torsten Scholak</div>
-</footer>
+    <p>Copyright © 2021 Torsten Scholak</p>
+    <p>
+        <a href="feed.xml">
+            
+        </a>
 
-<script src="/js/main.js"></script>
+        {{#githubUser}}
+        <a href="https://github.com/{{githubUser}}">
+            
+        </a>
+        {{/githubUser}}
+
+        {{#twitterHandle}}
+        <a href="https://twitter.com/{{twitterHandle}}">
+            
+        </a>
+        {{/twitterHandle}}
+
+        {{#youtubeHandle}}
+        <a href="https://youtube.com/{{youtubeHandle}}">
+            
+        </a>
+        {{/youtubeHandle}}
+
+        {{#twitchHandle}}
+        <a href="https://twitch.com/{{twitchHandle}}">
+            
+        </a>
+        {{/twitchHandle}}
+    </p>
+</footer>

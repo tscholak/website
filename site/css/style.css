@@ -1,0 +1,258 @@
+:root {
+  --bg: rgba(0, 0, 0, 0);
+  --prebg: rgba(0, 0, 0, 0);
+  --text: #000000;
+  --headertext: black;
+  --headerbg: #b27b00;
+  --menu0bg: #a06e00;
+  --menu1bg: #8e6200;
+  --menu2bg: #7c5600;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: "PragmataProLiga-Regular", monospace;
+  padding: 0px;
+  margin: 0px;
+  margin-left: auto;
+  margin-right: auto;
+  max-width: 65em;
+  overflow-y: scroll;
+  line-height: 1.4;
+}
+
+#content {
+  width: 90%;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+body > * {
+  margin: 1%;
+}
+
+h1 {
+  font-size: 1em;
+}
+
+h1::before {
+  content: "# ";
+}
+
+h2 {
+  margin-top: 1em;
+  font-size: 1em;
+}
+
+h2::before {
+  content: "## ";
+}
+
+h3 {
+  margin-top: 1em;
+  font-size: 1em;
+}
+
+h3::before {
+  content: "### ";
+}
+
+#header, #footer {
+  background-color: var(--headerbg);
+  margin: 0;
+}
+
+#header a {
+  font-weight: bold;
+  font-variant: normal;
+  font-family: monospace;
+  border: 0;
+}
+
+.superHeader ul {
+  margin: 0;
+}
+
+.superHeader li {
+  display: inline;
+  list-style-type: none;
+  float: right;
+  margin: 0;
+  padding: 0;
+}
+
+.superHeader a {
+  color: var(--bg);
+  padding: 5px;
+}
+
+.superHeader a:hover {
+  background-color: var(--bg);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.headerTitle, .headerTitle a {
+  color: var(--bg);
+  font-family: serif;
+  margin: 1%;
+}
+
+.subHeader ul {
+  margin: 0;
+  list-style-type: none;
+  list-style-image: none;
+}
+
+.subHeader li {
+  display: inline-block;
+  border-right: 1px solid var(--bg);
+  margin: 0;
+  margin-top: 0.5em;
+}
+
+.subHeader a {
+  color: var(--bg);
+  padding: 0.5em;
+  margin: 0;
+}
+
+.subHeader a:hover, .thisPage {
+  background-color: var(--bg);
+  color: var(--text) !important;
+}
+
+.menu0 {
+  background-color: var(--menu0bg);
+}
+
+.menu0 li {
+  border: 0;
+}
+
+.menu1 {
+  background-color: var(--menu1bg);
+}
+
+.menu1 li {
+  border: 0;
+}
+
+.menu2 {
+  background-color: var(--menu2bg);
+}
+
+.menu2 li {
+  border: 0;
+}
+
+.progName {
+  font-family: monospace;
+  font-style: italic;
+}
+
+#updatedDate {
+  color: var(--bg);
+  text-align: right;
+  margin-left: 1em;
+  margin-right: 1em;
+}
+
+/* # General styling # */
+
+img {
+  border: 0;
+}
+
+table {
+  margin: 15px;
+  background-color: transparent;
+  border: 0px dashed var(--bg);
+}
+
+hr {
+  margin: 0;
+}
+
+td {
+  background-color: var(--bg);
+  border:1px solid var(--text);
+  padding:0.2em 20px 0.2em 10px;
+}
+
+a {
+  color: var(--text);
+}
+
+a:link, a:visited {
+  text-decoration: none;
+  border-bottom: 1px solid var(--text);
+}
+
+a:active, a:hover {
+  text-decoration: none;
+}
+
+a img {
+  border: 0px;
+}
+
+li {
+  margin-left: 2%;
+}
+
+h1>a, h2>a, h3>a {
+  color: var(--text);
+  text-decoration: none;
+}
+
+h1>a, h2>a, h3>a:hover {
+  color: var(--text);
+  text-decoration: none;
+}
+
+pre {
+  background-color: var(--prebg);
+  margin-top: 0;
+  margin-bottom: 0;
+  margin-left: 3ex;
+}
+
+code {
+  font-weight: bold;
+}
+
+pre > code {
+  font-weight: normal;
+}
+
+/* Blog styling */
+
+.posttitle {
+  margin-bottom: 0em;
+}
+
+.postmetadata {
+  margin-top:0em;
+  font-size:10pt;
+}
+
+/* # General util # */
+
+.left {
+  float: left;
+}
+
+.right {
+  text-align: right;
+}
+
+.doNotDisplay {
+  display: none;
+}
+
+.sourceCode {
+  border: 0;
+  background-color: var(--prebg);
+}
