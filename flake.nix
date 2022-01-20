@@ -48,6 +48,7 @@
           nativeBuildInputs = [
             haskellNix.website.project.roots
             pkgs.nodePackages.serve
+            pkgs.pandoc
           ];
           exactDeps = true;
         };
