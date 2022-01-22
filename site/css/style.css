@@ -3,6 +3,7 @@
   --prebg: rgba(0, 0, 0, 0);
   --text: rgb(0, 0, 0);
   --pretext: rgba(0, 0, 0);
+  --accent: rgb(0, 0, 0);
 }
 
 body {
@@ -24,6 +25,7 @@ body > * {
 
 h1 {
   font-size: 1em;
+  color: var(--accent);
 }
 
 h1::before {
@@ -33,6 +35,7 @@ h1::before {
 h2 {
   margin-top: 1em;
   font-size: 1em;
+  color: var(--accent);
 }
 
 h2::before {
@@ -42,6 +45,7 @@ h2::before {
 h3 {
   margin-top: 1em;
   font-size: 1em;
+  color: var(--accent);
 }
 
 h3::before {

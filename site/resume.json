@@ -3,8 +3,8 @@
   "basics": {
     "name": "Torsten Scholak",
     "label": "NLP researcher and project lead at ServiceNow Research",
-    "image": "https://avatars3.githubusercontent.com/u/1568873?s=460&u=65ed466c5b8c624ff7523315b76f56ac40c44696&v=4",
-    "summary": "I'm a researcher, tech and research lead, mentor, developer, and innovator who can drive and guide academic and product-focussed research projects from inception to conclusion.",
+    "image": "images/torsten.jpg",
+    "summary": "I'm a researcher, tech and research lead, mentor, developer, and innovator who can drive and guide academic and product-focused research projects from their beginning to their end.",
     "location": {
       "address": "",
       "postalCode": "",
@@ -50,7 +50,7 @@
       "company": "Element AI",
       "highlights": [
         "Developed research tracks and projects, oversaw and participated in their execution, and reported results to stakeholders and product teams",
-        "Liased with product teams to drive collaborative research agendas and align values",
+        "Liaised with product teams to drive collaborative research agendas and align values",
         "Worked on program synthesis in the context of human-machine interaction",
         "Researched, designed, and built a state-of-the-art model for text-to-code translation in PyTorch",
         "Developed a fast training method for grammar-constrained sequence decoding"
@@ -63,7 +63,7 @@
     {
       "company": "Element AI",
       "highlights": [
-        "As an NLP tech lead, conducted stand-ups, defined projects and goals, set expectations, and regularly liased with product teams and management",
+        "As an NLP tech lead, conducted stand-ups, defined projects and goals, set expectations, and regularly liaised with product teams and management",
         "Mentored junior researchers and interns",
         "Researched, designed, and implemented effective and novel methods for improving the time-quality-cost tradeoffs in data crowdsourcing",
         "Researched, designed, and implemented unconventional and effective models for tree-structured decoding",
