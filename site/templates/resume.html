@@ -1,0 +1,228 @@
+<div>
+    <h1>Resume</h1>
+    <p>Below is my resume. A PDF version is available upon request.</p>
+    {{#basics}}
+        <h2>Basics</h2>
+        {{#name}}
+            <p>Name: {{.}}</p>
+        {{/name}}
+        {{#label}}
+            <p>Label: {{.}}</p>
+        {{/label}}
+        {{#image}}
+            <p><img src="{{.}}"></p>
+        {{/image}}
+        {{#website}}
+            <p>Website: <a href="{{.}}">{{.}}</a></p>
+        {{/website}}
+        {{#summary}}
+            <p>Summary: {{.}}</p>
+        {{/summary}}
+        {{#location}}
+            <h2>Location</h2>
+            {{#city}}
+                <p>City: {{.}}</p>
+            {{/city}}
+            {{#region}}
+                <p>Region: {{.}}</p>
+            {{/region}}
+            {{#countryCode}}
+                <p>Country Code: {{.}}</p>
+            {{/countryCode}}
+        {{/location}}
+        {{#profiles}}
+            <h2>Profiles</h2>
+            {{#items}}
+                <h3>{{network}}</h3>
+                {{#username}}
+                    <p>Username: {{.}}</p>
+                {{/username}}
+                {{#url}}
+                    <p>URL: <a href="{{url}}">{{url}}</a></p>
+                {{/url}}
+            {{/items}}
+        {{/profiles}}
+    {{/basics}}
+    {{#work}}
+        <h2>Work</h2>
+        {{#items}}
+        {{>site/templates/organization.html}}
+        {{/items}}
+    {{/work}}
+    {{#volunteer}}
+        <h2>Volunteer</h2>
+        {{#items}}
+            {{>site/templates/organization.html}}
+        {{/items}}
+    {{/volunteer}}
+    {{#education}}
+        <h2>Education</h2>
+        {{#items}}
+            <h3>{{{institution}}}</h3>
+            {{#area}}
+                <p>Area: {{.}}</p>
+            {{/area}}
+            {{#studyType}}
+                <p>Study Type: {{.}}</p>
+            {{/studyType}}
+            {{#startDate}}
+                <p>Start Date: {{.}}</p>
+            {{/startDate}}
+            {{#endDate}}
+                <p>End Date: {{.}}</p>
+            {{/endDate}}
+            {{#gpa}}
+                <p>GPA: {{gpa}}</p>
+            {{/gpa}}
+            {{#courses}}
+                <p>
+                    Courses:
+                    <ul>
+                        {{#items}}
+                            <li>{{.}}</li>
+                        {{/items}}
+                    </ul>
+                </p>
+            {{/courses}}
+        {{/items}}
+    {{/education}}
+    {{#awards}}
+        <h2>Awards</h2>
+        {{#items}}
+            <h3>{{{title}}}</h3>
+            {{#date}}
+                <p>Date: {{.}}</p>
+            {{/date}}
+            {{#awarder}}
+                <p>Awarder: {{.}}</p>
+            {{/awarder}}
+            {{#summary}}
+                <p>Summary: {{{.}}}</p>
+            {{/summary}}
+        {{/items}}
+    {{/awards}}
+    {{#publications}}
+        <h2>Publications</h2>
+        {{#items}}
+            <h3>{{{name}}}</h3>
+            {{#publisher}}
+                <p>Publisher: {{.}}</p>
+            {{/publisher}}
+            {{#releaseDate}}
+                <p>Release Date: {{.}}</p>
+            {{/releaseDate}}
+            {{#website}}
+                <p>Website: <a href="{{website}}">{{.}}</a></p>
+            {{/website}}
+            {{#summary}}
+                <p>Summary: {{{.}}}</p>
+            {{/summary}}
+        {{/items}}
+    {{/publications}}
+    {{#skills}}
+        <h2>Skills</h2>
+        {{#items}}
+            <h3>{{name}}</h3>
+            {{#level}}
+                <p>Level: {{.}}</p>
+            {{/level}}
+            {{#keywords}}
+                <p>
+                    Keywords:
+                    <ul>
+                        {{#items}}
+                            <li>{{.}}</li>
+                        {{/items}}
+                    </ul>
+                </p>
+            {{/keywords}}
+        {{/items}}
+    {{/skills}}
+    {{#languages}}
+        <h2>Languages</h2>
+        {{#items}}
+            <h3>{{language}}</h3>
+            {{#fluency}}
+                <p>Fluency: {{.}}</p>
+            {{/fluency}}
+        {{/items}}
+    {{/languages}}
+    {{#interests}}
+        <h2>Interests</h2>
+        {{#items}}
+            <h3>{{name}}</h3>
+            {{#keywords}}
+            <p>Keywords:
+                <ul>
+                    {{#items}}
+                        <li>{{.}}</li>
+                    {{/items}}
+                </ul>
+            </p>
+            {{/keywords}}
+        {{/items}}
+    {{/interests}}
+    {{#references}}
+        <h2>References</h2>
+        {{#items}}
+            <h3>{{name}}</h3>
+            {{#reference}}
+                <p>Reference: {{.}}</p>
+            {{/reference}}
+        {{/items}}
+    {{/references}}
+    {{#projects}}
+        <h2>Projects</h2>
+        {{#items}}
+            <h3>{{name}}</h3>
+            {{#description}}
+                <p>Description: {{{.}}}</p>
+            {{/description}}
+            {{#highlights}}
+                <p>
+                    Highlights:
+                    <ul>
+                        {{#items}}
+                            <li>{{{.}}}</li>
+                        {{/items}}
+                    </ul>
+                </p>
+            {{/highlights}}
+            {{#keywords}}
+                <p>
+                    Keywords:
+                    <ul>
+                        {{#items}}
+                            <li>{{.}}</li>
+                        {{/items}}
+                    </ul>
+                </p>
+            {{/keywords}}
+            {{#startDate}}
+                <p>Start Date: {{.}}</p>
+            {{/startDate}}
+            {{#endDate}}
+                <p>End Date: {{.}}</p>
+            {{/endDate}}
+            {{#url}}
+                <p>URL: <a href="{{url}}">{{url}}</a></p>
+            {{/url}}
+            {{#roles}}
+                <p>
+                    Roles:
+                    <ul>
+                        {{#items}}
+                            <li>{{.}}</li>
+                        {{/items}}
+                    </ul>
+                </p>
+            {{/roles}}
+            {{#entity}}
+                <p>Entity: {{.}}</p>
+            {{/entity}}
+            {{#type}}
+                <p>Type: {{.}}</p>
+            {{/type}}
+        {{/items}}
+    {{/projects}}
+</div>

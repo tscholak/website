@@ -1,0 +1,27 @@
+
+<h3>{{{position}}}</h3>
+{{#company}}
+    <p>Company: {{company}}</p>
+{{/company}}
+{{#website}}
+    <p>Website: <a href="{{website}}">{{website}}</a></p>
+{{/website}}
+{{#startDate}}
+    <p>Start Date: {{startDate}}</p>
+{{/startDate}}
+{{#endDate}}
+    <p>End Date: {{endDate}}</p>
+{{/endDate}}
+{{#summary}}
+    <p>Summary: {{{summary}}}</p>
+{{/summary}}
+{{#highlights}}
+    <p>
+        Highlights:
+        <ul>
+            {{#items}}
+                <li>{{{.}}}</li>
+            {{/items}}
+        </ul>
+    </p>
+{{/highlights}}

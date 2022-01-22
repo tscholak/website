@@ -2,3 +2,7 @@ cradle:
   cabal:
     - path: "./app"
       component: "exe:website"
+    - path: "./site"
+      component: "exe:website"
+    - path: "./site/posts"
+      component: "exe:website"

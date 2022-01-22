@@ -8,7 +8,7 @@ journal: "arXiv:2112.04630 [cs.CL]"
 date: Dec 9, 2021
 tldr: "Are neural models bad at interpreting programs? For the AIPLANS NeurIPS workshop in 2021, we created a dataset of functional programs, and trained T5 to reduce them to their normal forms. Turns out it works even for challenging data splits!"
 image: neural-interpreters.png
-tags: [research]
+tags: [research, haskell]
 link: 'https://arxiv.org/abs/2112.04630'
 pdf: 'https://arxiv.org/pdf/2112.04630'
 code: 'https://github.com/ElementAI/neural-interpreters'
