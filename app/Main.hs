@@ -45,7 +45,6 @@ import Slick (compileTemplate', convert, substitute)
 import Slick.Pandoc (defaultHtml5Options, markdownToHTMLWithOpts)
 import System.Process (readProcess)
 import qualified Text.Pandoc as P
-import Debug.Trace (traceShowId)
 import Data.List.NonEmpty (NonEmpty)
 import qualified Data.List.NonEmpty as NonEmpty
 
@@ -468,7 +467,7 @@ buildBlogPost postSrcPath = cacheAction ("build" :: T.Text, postSrcPath) $ do
       content = T.unpack $ fromMaybe "" $ postData ^? A.key "content" . A._String
       withReadTime = A._Object . at "readTime" ?~ A.Integer (calcReadTime content)
       withGitHash = A._Object . at "gitHash" ?~ A.String (T.pack gitHash)
-      fullPostData = traceShowId $ withSiteMeta . withReadTime . withGitHash . withPostUrl $ postData
+      fullPostData = withSiteMeta . withReadTime . withGitHash . withPostUrl $ postData
   postTemplate <- compileTemplate' "site/templates/post.html"
   writeFile' (outputFolder </> T.unpack postUrl) . T.unpack $ substitute postTemplate fullPostData
   convert fullPostData
