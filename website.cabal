@@ -21,7 +21,7 @@ source-repository head
 executable website
   main-is: Main.hs
   other-modules:
-      About
+      Contact
       Unrecurse
   hs-source-dirs:
       app
