@@ -1,8 +1,7 @@
 ---
-title: "Hello, world!"
+title: "Nil."
 date: Jan 1, 2022
-teaser: The first post!
-tags: []
+teaser: Nil.
 ---
 
-This is the first post. That is all.
+Nil.

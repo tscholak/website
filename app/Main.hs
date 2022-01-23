@@ -16,6 +16,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE LambdaCase #-}
 
 module Main where
 
@@ -44,6 +45,9 @@ import Slick (compileTemplate', convert, substitute)
 import Slick.Pandoc (defaultHtml5Options, markdownToHTMLWithOpts)
 import System.Process (readProcess)
 import qualified Text.Pandoc as P
+import Debug.Trace (traceShowId)
+import Data.List.NonEmpty (NonEmpty)
+import qualified Data.List.NonEmpty as NonEmpty
 
 -- | site meta data
 -- TODO: move to config file
@@ -139,13 +143,20 @@ articleKind :: forall kind. Article kind -> ArticleKind
 articleKind BlogPost {} = BlogPostKind
 articleKind Publication {} = PublicationKind
 
+newtype Items a = Items {items :: NonEmpty a}
+  deriving stock (Eq, Ord, Show, Generic)
+  deriving anyclass (A.ToJSON, A.FromJSON, Binary)
+
+itemsToList :: Maybe (Items a) -> [a]
+itemsToList = maybe [] (NonEmpty.toList . items)
+
 data Article kind where
   BlogPost ::
     { bpTitle :: String,
       bpContent :: String,
       bpUrl :: String,
       bpDate :: String,
-      bpTagNames :: [TagName],
+      bpTagNames :: Maybe (Items TagName),
       bpTeaser :: String,
       bpReadTime :: Int,
       bpGitHash :: String,
@@ -161,7 +172,7 @@ data Article kind where
       pubContent :: String,
       pubUrl :: String,
       pubDate :: String,
-      pubTagNames :: [TagName],
+      pubTagNames :: Maybe (Items TagName),
       pubTldr :: String,
       pubGitHash :: String,
       pubImage :: Maybe String,
@@ -297,7 +308,7 @@ instance A.FromJSON (Article 'BlogPostKind) where
         <*> o A..: "content"
         <*> o A..: "url"
         <*> o A..: "date"
-        <*> o A..: "tags"
+        <*> o A..:? "tags"
         <*> o A..: "teaser"
         <*> o A..: "readTime"
         <*> o A..: "gitHash"
@@ -315,7 +326,7 @@ instance A.FromJSON (Article 'PublicationKind) where
         <*> o A..: "content"
         <*> o A..: "url"
         <*> o A..: "date"
-        <*> o A..: "tags"
+        <*> o A..:? "tags"
         <*> o A..: "tldr"
         <*> o A..: "gitHash"
         <*> o A..:? "image"
@@ -457,7 +468,7 @@ buildBlogPost postSrcPath = cacheAction ("build" :: T.Text, postSrcPath) $ do
       content = T.unpack $ fromMaybe "" $ postData ^? A.key "content" . A._String
       withReadTime = A._Object . at "readTime" ?~ A.Integer (calcReadTime content)
       withGitHash = A._Object . at "gitHash" ?~ A.String (T.pack gitHash)
-      fullPostData = withSiteMeta . withReadTime . withGitHash . withPostUrl $ postData
+      fullPostData = traceShowId $ withSiteMeta . withReadTime . withGitHash . withPostUrl $ postData
   postTemplate <- compileTemplate' "site/templates/post.html"
   writeFile' (outputFolder </> T.unpack postUrl) . T.unpack $ substitute postTemplate fullPostData
   convert fullPostData
@@ -498,8 +509,8 @@ buildTagList articles =
   where
     tags = Map.unionsWith (<>) ((`withSomeArticle` collectTags) <$> articles)
     collectTags :: forall kind. Article kind -> Map TagName [SomeArticle]
-    collectTags post@BlogPost {bpTagNames} = Map.fromList $ (,pure $ SomeArticle post) <$> bpTagNames
-    collectTags publication@Publication {pubTagNames} = Map.fromList $ (,pure $ SomeArticle publication) <$> pubTagNames
+    collectTags post@BlogPost {bpTagNames} = Map.fromList $ (,pure $ SomeArticle post) <$> itemsToList bpTagNames
+    collectTags publication@Publication {pubTagNames} = Map.fromList $ (,pure $ SomeArticle publication) <$> itemsToList pubTagNames
     mkTag (tagName@(TagName name), articles') =
       Tag
         { name = tagName,

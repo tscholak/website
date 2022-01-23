@@ -2,7 +2,8 @@
 title: "Unrecurse"
 date: Jan 20, 2022
 teaser: Let's play with recursion!
-tags: [haskell]
+tags:
+  items: [haskell]
 ---
 
 > {-# LANGUAGE RankNTypes #-}

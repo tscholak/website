@@ -28,7 +28,8 @@ journal: "arXiv:2201.05966 [cs.CL]"
 date: Jan 16, 2022
 tldr: "Let's unify all structured-knowledge grounded tasks into the same text-to-text framework!"
 image: unified-skg.png
-tags: [research]
+tags:
+  items: [research]
 link: 'https://arxiv.org/abs/2201.05966'
 pdf: 'https://arxiv.org/pdf/2201.05966'
 code: 'https://github.com/hkunlp/unifiedskg'

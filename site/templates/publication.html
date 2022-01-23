@@ -40,12 +40,14 @@
             <a href="{{poster}}">Poster</a>
             {{/poster}}
         </p>
+        {{#tags}}
         <p>
             Tagged as:
-            {{#tags}}
+            {{#items}}
             <a href="/tags/{{.}}">{{.}}</a>
-            {{/tags}}
+            {{/items}}
         </p>
+        {{/tags}}
         <p>TL;DR: {{tldr}}</p>
         {{{content}}}
     </div>

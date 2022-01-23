@@ -13,13 +13,16 @@
         {{/image}}
 
         <h1>{{title}}</h1>
+        {{#tags}}
         <p>
             Tagged as:
-            {{#tags}}
+            {{#items}}
             <a href="/tags/{{.}}">{{.}}</a>
-            {{/tags}}
+            {{/items}}
         </p>
-        <p>{{date}}, {{readTime}} min read</p>
+        {{/tags}}
+        <p>Posted on {{date}}</p>
+        <p>{{readTime}} min read</p>
         {{{content}}}
     </div>
 
