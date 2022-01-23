@@ -6,13 +6,11 @@
     {{>site/templates/header.html}}
 
     <div>
+        <p>{{{gitHash}}}</p>
+
         <h1>About</h1>
         {{{content}}}
     </div>
-
-    {{#resume}}
-    {{>site/templates/resume.html}}
-    {{/resume}}
 
     {{>site/templates/footer.html}}
 </body>

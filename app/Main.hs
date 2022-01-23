@@ -39,8 +39,10 @@ import Development.Shake.Classes (Binary (..))
 import Development.Shake.FilePath (dropDirectory1, takeExtension, (-<.>), (</>))
 import Development.Shake.Forward (cacheAction, shakeArgsForward)
 import GHC.Generics (Generic)
+import Network.URI (URI (uriPath), parseURI)
 import Slick (compileTemplate', convert, substitute)
 import Slick.Pandoc (defaultHtml5Options, markdownToHTMLWithOpts)
+import System.Process (readProcess)
 import qualified Text.Pandoc as P
 
 -- | site meta data
@@ -56,7 +58,8 @@ siteMeta =
       twitterHandle = Just "tscholak",
       twitchHandle = Just "tscholak",
       youtubeHandle = Just "tscholak",
-      githubUser = Just "tscholak"
+      githubUser = Just "tscholak",
+      githubRepository = Just "https://github.com/tscholak/website"
     }
 
 -- | the output directory
@@ -110,7 +113,8 @@ data SiteMeta = SiteMeta
     twitterHandle :: Maybe String, -- Without @
     twitchHandle :: Maybe String,
     youtubeHandle :: Maybe String,
-    githubUser :: Maybe String
+    githubUser :: Maybe String,
+    githubRepository :: Maybe String
   }
   deriving stock (Generic, Eq, Ord, Show)
   deriving anyclass (A.ToJSON)
@@ -144,6 +148,7 @@ data Article kind where
       bpTagNames :: [TagName],
       bpTeaser :: String,
       bpReadTime :: Int,
+      bpGitHash :: String,
       bpImage :: Maybe String,
       bpPrev :: Maybe (Article 'BlogPostKind),
       bpNext :: Maybe (Article 'BlogPostKind)
@@ -158,6 +163,7 @@ data Article kind where
       pubDate :: String,
       pubTagNames :: [TagName],
       pubTldr :: String,
+      pubGitHash :: String,
       pubImage :: Maybe String,
       pubLink :: String,
       pubPDF :: Maybe String,
@@ -177,12 +183,72 @@ deriving stock instance Ord (Article kind)
 deriving stock instance Show (Article kind)
 
 instance Binary (Article 'BlogPostKind) where
-  put BlogPost {..} = put bpTitle >> put bpContent >> put bpUrl >> put bpDate >> put bpTagNames >> put bpTeaser >> put bpReadTime >> put bpImage >> put bpPrev >> put bpNext
-  get = BlogPost <$> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get
+  put BlogPost {..} = do
+    put bpTitle
+    put bpContent
+    put bpUrl
+    put bpDate
+    put bpTagNames
+    put bpTeaser
+    put bpReadTime
+    put bpGitHash
+    put bpImage
+    put bpPrev
+    put bpNext
+  get =
+    BlogPost
+      <$> get
+      <*> get
+      <*> get
+      <*> get
+      <*> get
+      <*> get
+      <*> get
+      <*> get
+      <*> get
+      <*> get
+      <*> get
 
 instance Binary (Article 'PublicationKind) where
-  put Publication {..} = put pubTitle >> put pubAuthor >> put pubJournal >> put pubContent >> put pubUrl >> put pubDate >> put pubTagNames >> put pubTldr >> put pubImage >> put pubLink >> put pubPDF >> put pubCode >> put pubTalk >> put pubSlides >> put pubPoster >> put pubPrev >> put pubNext
-  get = Publication <$> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get
+  put Publication {..} = do
+    put pubTitle
+    put pubAuthor
+    put pubJournal
+    put pubContent
+    put pubUrl
+    put pubDate
+    put pubTagNames
+    put pubTldr
+    put pubGitHash
+    put pubImage
+    put pubLink
+    put pubPDF
+    put pubCode
+    put pubTalk
+    put pubSlides
+    put pubPoster
+    put pubPrev
+    put pubNext
+  get =
+    Publication
+      <$> get
+      <*> get
+      <*> get
+      <*> get
+      <*> get
+      <*> get
+      <*> get
+      <*> get
+      <*> get
+      <*> get
+      <*> get
+      <*> get
+      <*> get
+      <*> get
+      <*> get
+      <*> get
+      <*> get
+      <*> get
 
 instance A.ToJSON (Article 'BlogPostKind) where
   toJSON BlogPost {..} =
@@ -194,6 +260,7 @@ instance A.ToJSON (Article 'BlogPostKind) where
         "tags" A..= bpTagNames,
         "teaser" A..= bpTeaser,
         "readTime" A..= bpReadTime,
+        "gitHash" A..= bpGitHash,
         "image" A..= bpImage,
         "prev" A..= bpPrev,
         "next" A..= bpNext
@@ -210,6 +277,7 @@ instance A.ToJSON (Article 'PublicationKind) where
         "date" A..= pubDate,
         "tags" A..= pubTagNames,
         "tldr" A..= pubTldr,
+        "gitHash" A..= pubGitHash,
         "image" A..= pubImage,
         "link" A..= pubLink,
         "pdf" A..= pubPDF,
@@ -232,6 +300,7 @@ instance A.FromJSON (Article 'BlogPostKind) where
         <*> o A..: "tags"
         <*> o A..: "teaser"
         <*> o A..: "readTime"
+        <*> o A..: "gitHash"
         <*> o A..:? "image"
         <*> o A..:? "prev"
         <*> o A..:? "next"
@@ -239,24 +308,25 @@ instance A.FromJSON (Article 'BlogPostKind) where
 instance A.FromJSON (Article 'PublicationKind) where
   parseJSON =
     A.withObject "Publication" $ \o ->
-      Publication <$> o
-        A..: "title" <*> o
-        A..: "author" <*> o
-        A..: "journal" <*> o
-        A..: "content" <*> o
-        A..: "url" <*> o
-        A..: "date" <*> o
-        A..: "tags" <*> o
-        A..: "tldr" <*> o
-        A..:? "image" <*> o
-        A..: "link" <*> o
-        A..:? "pdf" <*> o
-        A..:? "code" <*> o
-        A..:? "talk" <*> o
-        A..:? "slides" <*> o
-        A..:? "poster" <*> o
-        A..:? "prev" <*> o
-        A..:? "next"
+      Publication
+        <$> o A..: "title"
+        <*> o A..: "author"
+        <*> o A..: "journal"
+        <*> o A..: "content"
+        <*> o A..: "url"
+        <*> o A..: "date"
+        <*> o A..: "tags"
+        <*> o A..: "tldr"
+        <*> o A..: "gitHash"
+        <*> o A..:? "image"
+        <*> o A..: "link"
+        <*> o A..:? "pdf"
+        <*> o A..:? "code"
+        <*> o A..:? "talk"
+        <*> o A..:? "slides"
+        <*> o A..:? "poster"
+        <*> o A..:? "prev"
+        <*> o A..:? "next"
 
 data SomeArticle = forall kind. SomeArticle (Article kind)
 
@@ -321,10 +391,10 @@ instance A.ToJSON Tag where
 instance A.FromJSON Tag where
   parseJSON =
     A.withObject "Tag" $ \o ->
-      Tag <$> o
-        A..: "tag" <*> o
-        A..: "articles" <*> o
-        A..: "url"
+      Tag
+        <$> o A..: "tag"
+        <*> o A..: "articles"
+        <*> o A..: "url"
 
 newtype TagsInfo = TagsInfo
   { tags :: [Tag]
@@ -379,11 +449,13 @@ buildBlogPost postSrcPath = cacheAction ("build" :: T.Text, postSrcPath) $ do
     ".md" -> markdownToHTML . T.pack $ postContent
     ".lhs" -> codeToHTML . T.pack $ postContent
     _ -> fail "Expected .md or .lhs"
+  gitHash <- getGitHash postSrcPath >>= prettyGitHash
   let postUrl = T.pack . dropDirectory1 $ postSrcPath -<.> "html"
       withPostUrl = A._Object . at "url" ?~ A.String postUrl
       content = T.unpack $ fromMaybe "" $ postData ^? A.key "content" . A._String
       withReadTime = A._Object . at "readTime" ?~ A.Integer (calcReadTime content)
-      fullPostData = withSiteMeta . withReadTime . withPostUrl $ postData
+      withGitHash = A._Object . at "gitHash" ?~ A.String (T.pack gitHash)
+      fullPostData = withSiteMeta . withReadTime . withGitHash . withPostUrl $ postData
   postTemplate <- compileTemplate' "site/templates/post.html"
   writeFile' (outputFolder </> T.unpack postUrl) . T.unpack $ substitute postTemplate fullPostData
   convert fullPostData
@@ -408,9 +480,11 @@ buildPublication :: FilePath -> Action (Article 'PublicationKind)
 buildPublication publicationSrcPath = cacheAction ("build" :: T.Text, publicationSrcPath) $ do
   publicationContent <- readFile' publicationSrcPath
   publicationData <- markdownToHTML . T.pack $ publicationContent
+  gitHash <- getGitHash publicationSrcPath >>= prettyGitHash
   let publicationUrl = T.pack . dropDirectory1 $ publicationSrcPath -<.> "html"
       withPublicationUrl = A._Object . at "url" ?~ A.String publicationUrl
-      fullPublicationData = withSiteMeta . withPublicationUrl $ publicationData
+      withGitHash = A._Object . at "gitHash" ?~ A.String (T.pack gitHash)
+      fullPublicationData = withSiteMeta . withPublicationUrl . withGitHash $ publicationData
   publicationTemplate <- compileTemplate' "site/templates/publication.html"
   writeFile' (outputFolder </> T.unpack publicationUrl) . T.unpack $ substitute publicationTemplate fullPublicationData
   convert fullPublicationData
@@ -464,22 +538,35 @@ buildAbout :: Action ()
 buildAbout = cacheAction ("build" :: T.Text, aboutSrcPath) $ do
   aboutContent <- readFile' aboutSrcPath
   aboutData <- codeToHTML . T.pack $ aboutContent
-  resumeJson <- readFile' resumeSrcPath
-  let resumeData = fromMaybe "{}" . A.decode' . TL.encodeUtf8 $ TL.pack resumeJson
-      withResumeData = A._Object . at "resume" ?~ go resumeData
-        where
-          go :: A.Value -> A.Value
-          go (A.Object a) = A.Object $ HML.map go a
-          go (A.Array a) | null a = A.Null
-                         | otherwise = A.Object . HML.singleton "items" . A.Array $ go <$> a
-          go x = x
   aboutTemplate <- compileTemplate' "site/templates/about.html"
-  let fullAboutData = withSiteMeta . withResumeData $ aboutData
+  gitHash <- getGitHash aboutSrcPath >>= prettyGitHash
+  let withGitHash = A._Object . at "gitHash" ?~ A.String (T.pack gitHash)
+      fullAboutData = withSiteMeta . withGitHash $ aboutData
       aboutHTML = T.unpack $ substitute aboutTemplate fullAboutData
   writeFile' (outputFolder </> "about.html") aboutHTML
   where
     aboutSrcPath :: FilePath
     aboutSrcPath = "site/about.lhs"
+
+-- | build resume page
+buildResume :: Action ()
+buildResume = cacheAction ("build" :: T.Text, resumeSrcPath) $ do
+  resumeJson <- readFile' resumeSrcPath
+  resumeTemplate <- compileTemplate' "site/templates/resume.html"
+  gitHash <- getGitHash resumeSrcPath >>= prettyGitHash
+  let resumeData = go $ fromMaybe "{}" . A.decode' . TL.encodeUtf8 $ TL.pack resumeJson
+        where
+          go :: A.Value -> A.Value
+          go (A.Object a) = A.Object $ HML.map go a
+          go (A.Array a)
+            | null a = A.Null
+            | otherwise = A.Object . HML.singleton "items" . A.Array $ go <$> a
+          go x = x
+  let withGitHash = A._Object . at "gitHash" ?~ A.String (T.pack gitHash)
+      fullResumeData = withSiteMeta . withGitHash $ resumeData
+      resumeHTML = T.unpack $ substitute resumeTemplate fullResumeData
+  writeFile' (outputFolder </> "resume.html") resumeHTML
+  where
     resumeSrcPath :: FilePath
     resumeSrcPath = "site/resume.json"
 
@@ -540,8 +627,32 @@ buildRules = do
   tags <- buildTagList articles
   buildTags tags
   buildAbout
+  buildResume
   copyStaticFiles
   buildFeed articles
+
+data GitHash = GitHash {gitHash :: String, gitDate :: String, gitAuthor :: String, gitMessage :: String}
+  deriving (Eq, Show)
+
+-- | get git hash of last commit of a file
+getGitHash :: FilePath -> Action GitHash
+getGitHash path = do
+  let cmd format = liftIO $ readProcess "git" ["log", "--pretty=format:" <> format, "-n", "1", "--", path] ""
+  gitHash <- cmd "%h"
+  gitDate <- cmd "%ad"
+  gitAuthor <- cmd "%an"
+  gitMessage <- cmd "%s"
+  return GitHash {..}
+
+-- | pretty print git hash with link to GitHub commit
+prettyGitHash :: GitHash -> Action String
+prettyGitHash GitHash {..} = do
+  Just uri <- pure $ do
+    repo <- githubRepository siteMeta
+    repoUri <- parseURI repo
+    return $ repoUri {uriPath = uriPath repoUri <> "/commit/" <> gitHash}
+  let link = "<a href=\"" <> show uri <> "\">" <> gitHash <> "</a>"
+  return $ "commit " <> link <> " (" <> gitDate <> ") " <> gitAuthor <> ": " <> gitMessage
 
 -- | main program
 main :: IO ()

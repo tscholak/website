@@ -6,6 +6,12 @@
     {{>site/templates/header.html}}
 
     <div>
+        <p>{{{gitHash}}}</p>
+
+        {{#image}}
+        <p><img src="/images/{{.}}"></p>
+        {{/image}}
+
         <h1>{{title}}</h1>
         <p>
             Tagged as:
@@ -13,9 +19,6 @@
             <a href="/tags/{{.}}">{{.}}</a>
             {{/tags}}
         </p>
-        {{#image}}
-        <p><img src="/images/{{image}}"></p>
-        {{/image}}
         <p>{{date}}, {{readTime}} min read</p>
         {{{content}}}
     </div>

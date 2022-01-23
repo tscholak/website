@@ -6,9 +6,12 @@
     {{>site/templates/header.html}}
 
     <div>
+        <p>{{{gitHash}}}</p>
+
         {{#image}}
-        <p><img src="/images/{{image}}"></p>
+        <p><img src="/images/{{.}}"></p>
         {{/image}}
+
         <h1>{{title}}</h1>
         <p>
             <div id="csl">

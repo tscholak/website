@@ -34,8 +34,10 @@ executable website
     , containers
     , lens
     , lens-aeson
+    , network-uri
     , pandoc
     , pandoc-types
+    , process
     , shake
     , slick
     , split
