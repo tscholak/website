@@ -419,7 +419,9 @@ buildIndex = cacheAction ("build" :: T.Text, indexSrcPath) $ do
   indexContent <- readFile' indexSrcPath
   indexData <- markdownToHTML . T.pack $ indexContent
   indexTemplate <- compileTemplate' "site/templates/index.html"
-  let fullIndexData = withSiteMeta indexData
+  gitHash <- getGitHash indexSrcPath >>= prettyGitHash
+  let withGitHash = A._Object . at "gitHash" ?~ A.String (T.pack gitHash)
+      fullIndexData = withSiteMeta . withGitHash $ indexData
       indexHTML = T.unpack $ substitute indexTemplate fullIndexData
   writeFile' (outputFolder </> "index.html") indexHTML
   where
@@ -533,20 +535,20 @@ calcReadTime = fromIntegral . uncurry roundUp . flip divMod 200 . length . words
   where
     roundUp mins secs = mins + if secs == 0 then 0 else 1
 
--- | build about page
-buildAbout :: Action ()
-buildAbout = cacheAction ("build" :: T.Text, aboutSrcPath) $ do
-  aboutContent <- readFile' aboutSrcPath
-  aboutData <- codeToHTML . T.pack $ aboutContent
-  aboutTemplate <- compileTemplate' "site/templates/about.html"
-  gitHash <- getGitHash aboutSrcPath >>= prettyGitHash
+-- | build contact page
+buildContact :: Action ()
+buildContact = cacheAction ("build" :: T.Text, contactSrcPath) $ do
+  contactContent <- readFile' contactSrcPath
+  contactData <- codeToHTML . T.pack $ contactContent
+  contactTemplate <- compileTemplate' "site/templates/contact.html"
+  gitHash <- getGitHash contactSrcPath >>= prettyGitHash
   let withGitHash = A._Object . at "gitHash" ?~ A.String (T.pack gitHash)
-      fullAboutData = withSiteMeta . withGitHash $ aboutData
-      aboutHTML = T.unpack $ substitute aboutTemplate fullAboutData
-  writeFile' (outputFolder </> "about.html") aboutHTML
+      fullContactData = withSiteMeta . withGitHash $ contactData
+      contactHTML = T.unpack $ substitute contactTemplate fullContactData
+  writeFile' (outputFolder </> "contact.html") contactHTML
   where
-    aboutSrcPath :: FilePath
-    aboutSrcPath = "site/about.lhs"
+    contactSrcPath :: FilePath
+    contactSrcPath = "site/contact.lhs"
 
 -- | build resume page
 buildResume :: Action ()
@@ -626,7 +628,7 @@ buildRules = do
   let articles = (SomeArticle <$> posts) <> (SomeArticle <$> publications)
   tags <- buildTagList articles
   buildTags tags
-  buildAbout
+  buildContact
   buildResume
   copyStaticFiles
   buildFeed articles

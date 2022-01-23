@@ -1,6 +1,6 @@
-> module About where
+> module Contact where
 
-If you want to write me, then you can send me an `email`, where
+If you want to write me, feel free to send me an `email`, where
 
 > email :: String
 > email =
