@@ -27,26 +27,26 @@
     </div>
 
     <div>
-        {{#prev}}
-        <a href="/{{url}}">
-            <div>
-                <h2>Previous Post</h2>
-                <h3>{{title}}</h3>
-                <p>{{teaser}}</p>
-                <date>{{date}}</date>
-            </div>
-        </a>
-        {{/prev}}
         {{#next}}
         <a href="/{{url}}">
             <div>
-                <h2>Next Post</h2>
-                <h3>{{title}}</h3>
+                <h1>Next Post</h1>
+                <h2>{{title}}</h2>
+                <p>{{date}}</p>
                 <p>{{teaser}}</p>
-                <date>{{date}}</date>
             </div>
         </a>
         {{/next}}
+        {{#prev}}
+        <a href="/{{url}}">
+            <div>
+                <h1>Previous Post</h1>
+                <h2>{{title}}</h2>
+                <p>{{date}}</p>
+                <p>{{teaser}}</p>
+            </div>
+        </a>
+        {{/prev}}
     </div>
 
     {{>site/templates/footer.html}}

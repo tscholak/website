@@ -21,8 +21,8 @@
             </div>
         </p>
         <p><em>{{journal}}</em></p>
-        <p>{{date}}</p>
-        <p><a href="{{link}}">{{link}}</a></p>
+        <p>Published on {{date}}</p>
+        <p>Official link: <a href="{{link}}">{{link}}</a></p>
         <p>
             {{#pdf}}
             <a href="{{pdf}}">PDF</a>
@@ -53,26 +53,26 @@
     </div>
 
     <div>
-        {{#prev}}
-        <a href="/{{url}}">
-            <div>
-                <h2>Previous Publication</h2>
-                <h3>{{title}}</h3>
-                <p>{{tldr}}</p>
-                <date>{{date}}</date>
-            </div>
-        </a>
-        {{/prev}}
         {{#next}}
         <a href="/{{url}}">
             <div>
-                <h2>Next Publication</h2>
-                <h3>{{title}}</h3>
+                <h1>Next Publication</h1>
+                <h2>{{title}}</h2>
+                <p>{{date}}</p>
                 <p>{{tldr}}</p>
-                <date>{{date}}</date>
             </div>
         </a>
         {{/next}}
+        {{#prev}}
+        <a href="/{{url}}">
+            <div>
+                <h1>Previous Publication</h1>
+                <h2>{{title}}</h2>
+                <p>{{date}}</p>
+                <p>{{tldr}}</p>
+            </div>
+        </a>
+        {{/prev}}
     </div>
 
     {{>site/templates/footer.html}}

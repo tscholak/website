@@ -16,17 +16,19 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE LambdaCase #-}
 
 module Main where
 
-import Control.Lens (at, (?~), (^?))
+import Control.Lens (at, ix, (?~), (^?))
 import Control.Monad (void)
 import Control.Monad.IO.Class (MonadIO (liftIO))
+import Data.Aeson (toJSON)
 import qualified Data.Aeson as A (FromJSON (parseJSON), KeyValue ((.=)), ToJSON (toJSON), Value (..), decode', object, withObject, (.:), (.:?))
 import qualified Data.Aeson.Lens as A (AsPrimitive (_String), AsValue (_Object), key, pattern Integer)
 import qualified Data.HashMap.Lazy as HML
 import Data.List (sortOn)
+import Data.List.NonEmpty (NonEmpty)
+import qualified Data.List.NonEmpty as NonEmpty
 import Data.Map.Lazy (Map)
 import qualified Data.Map.Lazy as Map
 import Data.Maybe (fromMaybe)
@@ -45,8 +47,6 @@ import Slick (compileTemplate', convert, substitute)
 import Slick.Pandoc (defaultHtml5Options, markdownToHTMLWithOpts)
 import System.Process (readProcess)
 import qualified Text.Pandoc as P
-import Data.List.NonEmpty (NonEmpty)
-import qualified Data.List.NonEmpty as NonEmpty
 
 -- | site meta data
 -- TODO: move to config file
@@ -338,6 +338,16 @@ instance A.FromJSON (Article 'PublicationKind) where
         <*> o A..:? "prev"
         <*> o A..:? "next"
 
+assignAdjacentArticles :: forall kind. [Article kind] -> [Article kind]
+assignAdjacentArticles posts =
+  [ let prev = posts ^? ix (i + 1)
+        next = posts ^? ix (i - 1)
+        go Publication {} = cur {pubPrev = prev, pubNext = next}
+        go BlogPost {} = cur {bpPrev = prev, bpNext = next}
+     in go cur
+    | (cur, i) <- zip posts [0 :: Int ..]
+  ]
+
 data SomeArticle = forall kind. SomeArticle (Article kind)
 
 deriving stock instance Show SomeArticle
@@ -442,14 +452,16 @@ buildIndex = cacheAction ("build" :: T.Text, indexSrcPath) $ do
 buildBlogPostList :: Action [Article 'BlogPostKind]
 buildBlogPostList = do
   blogPostPaths <- getDirectoryFiles "." ["site/posts//*.md", "site/posts//*.lhs"]
-  forP blogPostPaths buildBlogPost
+  blogPosts <- forP blogPostPaths buildBlogPost
+  let blogPosts' = assignAdjacentArticles . sortOn (Down . parseDate . bpDate) $ blogPosts
+  _ <- forP blogPosts' writeBlogPost
+  return blogPosts'
 
 -- | build blog posts page
 buildBlogPosts :: [Article 'BlogPostKind] -> Action ()
 buildBlogPosts articles = do
   blogPostsTemplate <- compileTemplate' "site/templates/posts.html"
-  let sortedArticles = sortOn (Down . parseDate . bpDate) articles
-      blogPostsInfo = ArticlesInfo {articles = sortedArticles}
+  let blogPostsInfo = ArticlesInfo {articles}
       blogPostsHTML = T.unpack $ substitute blogPostsTemplate (withSiteMeta $ A.toJSON blogPostsInfo)
   writeFile' (outputFolder </> "posts.html") blogPostsHTML
 
@@ -468,22 +480,28 @@ buildBlogPost postSrcPath = cacheAction ("build" :: T.Text, postSrcPath) $ do
       withReadTime = A._Object . at "readTime" ?~ A.Integer (calcReadTime content)
       withGitHash = A._Object . at "gitHash" ?~ A.String (T.pack gitHash)
       fullPostData = withSiteMeta . withReadTime . withGitHash . withPostUrl $ postData
-  postTemplate <- compileTemplate' "site/templates/post.html"
-  writeFile' (outputFolder </> T.unpack postUrl) . T.unpack $ substitute postTemplate fullPostData
   convert fullPostData
+
+-- | write blog post to file
+writeBlogPost :: Article 'BlogPostKind -> Action ()
+writeBlogPost post@BlogPost {..} = do
+  postTemplate <- compileTemplate' "site/templates/post.html"
+  writeFile' (outputFolder </> bpUrl) . T.unpack . substitute postTemplate $ A.toJSON post
 
 -- | find and build all publications
 buildPublicationList :: Action [Article 'PublicationKind]
 buildPublicationList = do
   publicationPaths <- getDirectoryFiles "." ["site/publications//*.md"]
-  forP publicationPaths buildPublication
+  publications <- forP publicationPaths buildPublication
+  let publications' = assignAdjacentArticles . sortOn (Down . parseDate . pubDate) $ publications
+  _ <- forP publications' writePublication
+  return publications'
 
 -- | build publications page
 buildPublications :: [Article 'PublicationKind] -> Action ()
 buildPublications articles = do
   publicationsTemplate <- compileTemplate' "site/templates/publications.html"
-  let sortedArticles = sortOn (Down . parseDate . pubDate) articles
-      publicationsInfo = ArticlesInfo {articles = sortedArticles}
+  let publicationsInfo = ArticlesInfo {articles}
       publicationsHTML = T.unpack $ substitute publicationsTemplate (withSiteMeta $ A.toJSON publicationsInfo)
   writeFile' (outputFolder </> "publications.html") publicationsHTML
 
@@ -497,9 +515,13 @@ buildPublication publicationSrcPath = cacheAction ("build" :: T.Text, publicatio
       withPublicationUrl = A._Object . at "url" ?~ A.String publicationUrl
       withGitHash = A._Object . at "gitHash" ?~ A.String (T.pack gitHash)
       fullPublicationData = withSiteMeta . withPublicationUrl . withGitHash $ publicationData
-  publicationTemplate <- compileTemplate' "site/templates/publication.html"
-  writeFile' (outputFolder </> T.unpack publicationUrl) . T.unpack $ substitute publicationTemplate fullPublicationData
   convert fullPublicationData
+
+-- | write publication to file
+writePublication :: Article 'PublicationKind -> Action ()
+writePublication publication@Publication {..} = do
+  publicationTemplate <- compileTemplate' "site/templates/publication.html"
+  writeFile' (outputFolder </> pubUrl) . T.unpack . substitute publicationTemplate $ A.toJSON publication
 
 -- | find all tags and build tag pages
 buildTagList :: [SomeArticle] -> Action [Tag]
