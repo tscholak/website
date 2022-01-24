@@ -749,7 +749,7 @@ buildContact config = cacheAction ("build" :: T.Text, contactSrcPath) $ do
   writeFile' (runIdentity (outputFolder config) </> "contact.html") contactHTML
   where
     contactSrcPath :: FilePath
-    contactSrcPath = "site/contact.lhs"
+    contactSrcPath = "site/Contact.lhs"
 
 -- | build resume page
 buildResume :: Config Identity -> Action ()
