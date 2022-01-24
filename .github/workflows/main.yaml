@@ -10,6 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2.4.0
+      with:
+        fetch-depth: 0
     - run: |
         git log --pretty=format:"%h %ci %an %s" -n 1 -- site/
     - uses: cachix/install-nix-action@v16
