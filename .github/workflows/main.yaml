@@ -42,5 +42,8 @@ jobs:
         repo: tscholak/tscholak.github.io
         target_branch: main
         build_dir: ./build
+        keep_history: false
+        jekyll: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GH_PAT: ${{ secrets.GH_PAT }}
