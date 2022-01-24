@@ -21,7 +21,7 @@
   };
 
   outputs = { self, nixpkgs, haskell-nix, utils, ... }:
-    utils.lib.eachSystem [ "x86_64-darwin" ] (system:
+    utils.lib.eachSystem [ "x86_64-darwin" "x86_64-linux" ] (system:
       let
         pkgs = haskell-nix.legacyPackages.${system};
         hsPkgs = pkgs.haskellPackages;
