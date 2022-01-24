@@ -35,22 +35,9 @@
         };
 
         website = haskellNix.website.components.exes.website;
-
-        build = pkgs.stdenv.mkDerivation {
-          name = "tscholak-github-io-${self.shortRev or "dirty"}";
-
-          src = ./.;
-
-          dontBuild = true;
-
-          installPhase = ''
-            find .
-            ${website}/bin/website --input-folder site --output-folder $out -f config.json
-          '';
-        };
       in {
         packages = {
-          inherit website build;
+          inherit website;
         };
 
         devShell = haskellNix.shellFor {
@@ -68,6 +55,6 @@
           exactDeps = true;
         };
 
-        defaultPackage = build;
+        defaultPackage = website;
       });
 }
