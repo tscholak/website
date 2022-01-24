@@ -1,0 +1,40 @@
+<h2>Basics</h2>
+{{#name}}
+    <p>Name: {{.}}</p>
+{{/name}}
+{{#label}}
+    <p>Label: {{.}}</p>
+{{/label}}
+{{#image}}
+    <p><img src="{{.}}"></p>
+{{/image}}
+{{#website}}
+    <p>Website: <a href="{{.}}">{{.}}</a></p>
+{{/website}}
+{{#summary}}
+    <p>Summary: {{.}}</p>
+{{/summary}}
+{{#location}}
+    <h2>Location</h2>
+    {{#city}}
+        <p>City: {{.}}</p>
+    {{/city}}
+    {{#region}}
+        <p>Region: {{.}}</p>
+    {{/region}}
+    {{#countryCode}}
+        <p>Country Code: {{.}}</p>
+    {{/countryCode}}
+{{/location}}
+{{#profiles}}
+    <h2>Profiles</h2>
+    {{#items}}
+        <h3>{{network}}</h3>
+        {{#username}}
+            <p>Username: {{.}}</p>
+        {{/username}}
+        {{#url}}
+            <p>URL: <a href="{{url}}">{{url}}</a></p>
+        {{/url}}
+    {{/items}}
+{{/profiles}}

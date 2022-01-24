@@ -1,32 +1,22 @@
 <footer>
     <p>Copyright © 2022 Torsten Scholak</p>
     <p>
-        <a href="feed.xml">
-            
-        </a>
+        <a href="feed.xml"></a>
 
-        {{#githubUser}}
-        <a href="https://github.com/{{githubUser}}">
-            
-        </a>
-        {{/githubUser}}
+        {{#github_user}}
+        <a href="https://github.com/{{.}}"></a>
+        {{/github_user}}
 
-        {{#twitterHandle}}
-        <a href="https://twitter.com/{{twitterHandle}}">
-            
-        </a>
-        {{/twitterHandle}}
+        {{#twitter_handle}}
+        <a href="https://twitter.com/{{.}}"></a>
+        {{/twitter_handle}}
 
-        {{#youtubeHandle}}
-        <a href="https://youtube.com/{{youtubeHandle}}">
-            
-        </a>
-        {{/youtubeHandle}}
+        {{#youtube_handle}}
+        <a href="https://youtube.com/{{.}}"></a>
+        {{/youtube_handle}}
 
-        {{#twitchHandle}}
-        <a href="https://twitch.com/{{twitchHandle}}">
-            
-        </a>
-        {{/twitchHandle}}
+        {{#twitch_handle}}
+        <a href="https://twitch.com/{{.}}"></a>
+        {{/twitch_handle}}
     </p>
 </footer>

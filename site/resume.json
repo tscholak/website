@@ -136,7 +136,7 @@
       "company": "University of Freiburg",
       "highlights": [
         "Graded various graduate courses in special topics of quantum mechanics",
-        "Hosted and tought in course exercise groups"
+        "Hosted and taught in course exercise groups"
       ],
       "position": "Teaching Assistant",
       "startDate": "2008-02-28",
@@ -158,7 +158,7 @@
       "company": "University of Bayreuth",
       "highlights": [
         "Graded various graduate courses in special topics of quantum mechanics",
-        "Hosted and tought in course exercise groups"
+        "Hosted and taught in course exercise groups"
       ],
       "position": "Teaching Assistant",
       "startDate": "2007-01-31",
@@ -231,52 +231,52 @@
     {
       "name": "PyTorch",
       "level": "Advanced",
-      "keywords": []
+      "keywords": ["transformers", "language models"]
     },
     {
       "name": "Python",
       "level": "Advanced",
-      "keywords": []
+      "keywords": ["numpy"]
     },
     {
       "name": "Haskell",
       "level": "Advanced",
-      "keywords": []
+      "keywords": ["generics", "gadts", "type classes", "type families", "singleton types", "monads", "transformers", "extensible effects", "recursion schemes", "lenses", "attoparsec", "aeson", "hedgehog", "cabal"]
     },
     {
       "name": "Nix",
       "level": "Intermediate",
-      "keywords": []
+      "keywords": ["haskell.nix", "flakes"]
     },
     {
       "name": "Scala",
       "level": "Intermediate",
-      "keywords": []
+      "keywords": ["cats", "scalacheck", "spark"]
     },
     {
       "name": "SQL",
       "level": "Advanced",
-      "keywords": []
+      "keywords": ["postgresql", "sqlite"]
     },
     {
       "name": "Scientific Writing",
       "level": "Advanced",
-      "keywords": []
+      "keywords": ["publishing", "bibliography", "references"]
     },
     {
       "name": "Public Speaking",
       "level": "Intermediate",
-      "keywords": []
+      "keywords": ["talks", "presentations", "lectures", "reading groups"]
     },
     {
       "name": "Teaching",
       "level": "Intermediate",
-      "keywords": []
+      "keywords": ["graduate courses", "teaching assistance", "course exercises"]
     },
     {
       "name": "Rust",
       "level": "Beginner",
-      "keywords": []
+      "keywords": ["serde", "cargo"]
     }
   ],
   "languages": [
@@ -295,13 +295,16 @@
   ],
   "interests": [
     {
-      "name": "Biking"
+      "name": "Biking",
+      "keywords": ["road biking", "urban biking", "trail biking", "mountain biking", "bike commuting"]
     },
     {
-      "name": "Running"
+      "name": "Running",
+      "keywords": ["road running", "cross country running", "trail running", "snow shoe running"]
     },
     {
-      "name": "Open Source"
+      "name": "Open Source",
+      "keywords": ["software", "community"]
     }
   ],
   "references": [],

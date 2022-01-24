@@ -11,227 +11,66 @@
         <h1>Resume</h1>
         <p>Below is my resume. A PDF version is available upon request.</p>
         {{#basics}}
-            <h2>Basics</h2>
-            {{#name}}
-                <p>Name: {{.}}</p>
-            {{/name}}
-            {{#label}}
-                <p>Label: {{.}}</p>
-            {{/label}}
-            {{#image}}
-                <p><img src="{{.}}"></p>
-            {{/image}}
-            {{#website}}
-                <p>Website: <a href="{{.}}">{{.}}</a></p>
-            {{/website}}
-            {{#summary}}
-                <p>Summary: {{.}}</p>
-            {{/summary}}
-            {{#location}}
-                <h2>Location</h2>
-                {{#city}}
-                    <p>City: {{.}}</p>
-                {{/city}}
-                {{#region}}
-                    <p>Region: {{.}}</p>
-                {{/region}}
-                {{#countryCode}}
-                    <p>Country Code: {{.}}</p>
-                {{/countryCode}}
-            {{/location}}
-            {{#profiles}}
-                <h2>Profiles</h2>
-                {{#items}}
-                    <h3>{{network}}</h3>
-                    {{#username}}
-                        <p>Username: {{.}}</p>
-                    {{/username}}
-                    {{#url}}
-                        <p>URL: <a href="{{url}}">{{url}}</a></p>
-                    {{/url}}
-                {{/items}}
-            {{/profiles}}
+            {{>site/templates/resume/basics.html}}
         {{/basics}}
         {{#work}}
             <h2>Work</h2>
             {{#items}}
-            {{>site/templates/organization.html}}
+                {{>site/templates/resume/organization.html}}
             {{/items}}
         {{/work}}
         {{#volunteer}}
             <h2>Volunteer</h2>
             {{#items}}
-                {{>site/templates/organization.html}}
+                {{>site/templates/resume/organization.html}}
             {{/items}}
         {{/volunteer}}
         {{#education}}
             <h2>Education</h2>
             {{#items}}
-                <h3>{{{institution}}}</h3>
-                {{#area}}
-                    <p>Area: {{.}}</p>
-                {{/area}}
-                {{#studyType}}
-                    <p>Study Type: {{.}}</p>
-                {{/studyType}}
-                {{#startDate}}
-                    <p>Start Date: {{.}}</p>
-                {{/startDate}}
-                {{#endDate}}
-                    <p>End Date: {{.}}</p>
-                {{/endDate}}
-                {{#gpa}}
-                    <p>GPA: {{gpa}}</p>
-                {{/gpa}}
-                {{#courses}}
-                    <p>
-                        Courses:
-                        <ul>
-                            {{#items}}
-                                <li>{{.}}</li>
-                            {{/items}}
-                        </ul>
-                    </p>
-                {{/courses}}
+                {{>site/templates/resume/education.html}}
             {{/items}}
         {{/education}}
         {{#awards}}
             <h2>Awards</h2>
             {{#items}}
-                <h3>{{{title}}}</h3>
-                {{#date}}
-                    <p>Date: {{.}}</p>
-                {{/date}}
-                {{#awarder}}
-                    <p>Awarder: {{.}}</p>
-                {{/awarder}}
-                {{#summary}}
-                    <p>Summary: {{{.}}}</p>
-                {{/summary}}
+                {{>site/templates/resume/award.html}}
             {{/items}}
         {{/awards}}
         {{#publications}}
             <h2>Publications</h2>
             {{#items}}
-                <h3>{{{name}}}</h3>
-                {{#publisher}}
-                    <p>Publisher: {{.}}</p>
-                {{/publisher}}
-                {{#releaseDate}}
-                    <p>Release Date: {{.}}</p>
-                {{/releaseDate}}
-                {{#website}}
-                    <p>Website: <a href="{{website}}">{{.}}</a></p>
-                {{/website}}
-                {{#summary}}
-                    <p>Summary: {{{.}}}</p>
-                {{/summary}}
+                {{>site/templates/resume/publication.html}}
             {{/items}}
         {{/publications}}
         {{#skills}}
             <h2>Skills</h2>
             {{#items}}
-                <h3>{{name}}</h3>
-                {{#level}}
-                    <p>Level: {{.}}</p>
-                {{/level}}
-                {{#keywords}}
-                    <p>
-                        Keywords:
-                        <ul>
-                            {{#items}}
-                                <li>{{.}}</li>
-                            {{/items}}
-                        </ul>
-                    </p>
-                {{/keywords}}
+                {{>site/templates/resume/skill.html}}
             {{/items}}
         {{/skills}}
         {{#languages}}
             <h2>Languages</h2>
             {{#items}}
-                <h3>{{language}}</h3>
-                {{#fluency}}
-                    <p>Fluency: {{.}}</p>
-                {{/fluency}}
+                {{>site/templates/resume/language.html}}
             {{/items}}
         {{/languages}}
         {{#interests}}
             <h2>Interests</h2>
             {{#items}}
-                <h3>{{name}}</h3>
-                {{#keywords}}
-                <p>Keywords:
-                    <ul>
-                        {{#items}}
-                            <li>{{.}}</li>
-                        {{/items}}
-                    </ul>
-                </p>
-                {{/keywords}}
+                {{>site/templates/resume/interest.html}}
             {{/items}}
         {{/interests}}
         {{#references}}
             <h2>References</h2>
             {{#items}}
-                <h3>{{name}}</h3>
-                {{#reference}}
-                    <p>Reference: {{.}}</p>
-                {{/reference}}
+                {{>site/templates/resume/reference.html}}
             {{/items}}
         {{/references}}
         {{#projects}}
             <h2>Projects</h2>
             {{#items}}
-                <h3>{{name}}</h3>
-                {{#description}}
-                    <p>Description: {{{.}}}</p>
-                {{/description}}
-                {{#highlights}}
-                    <p>
-                        Highlights:
-                        <ul>
-                            {{#items}}
-                                <li>{{{.}}}</li>
-                            {{/items}}
-                        </ul>
-                    </p>
-                {{/highlights}}
-                {{#keywords}}
-                    <p>
-                        Keywords:
-                        <ul>
-                            {{#items}}
-                                <li>{{.}}</li>
-                            {{/items}}
-                        </ul>
-                    </p>
-                {{/keywords}}
-                {{#startDate}}
-                    <p>Start Date: {{.}}</p>
-                {{/startDate}}
-                {{#endDate}}
-                    <p>End Date: {{.}}</p>
-                {{/endDate}}
-                {{#url}}
-                    <p>URL: <a href="{{url}}">{{url}}</a></p>
-                {{/url}}
-                {{#roles}}
-                    <p>
-                        Roles:
-                        <ul>
-                            {{#items}}
-                                <li>{{.}}</li>
-                            {{/items}}
-                        </ul>
-                    </p>
-                {{/roles}}
-                {{#entity}}
-                    <p>Entity: {{.}}</p>
-                {{/entity}}
-                {{#type}}
-                    <p>Type: {{.}}</p>
-                {{/type}}
+                {{>site/templates/resume/project.html}}
             {{/items}}
         {{/projects}}
     </div>

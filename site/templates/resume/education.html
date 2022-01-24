@@ -1,0 +1,26 @@
+<h3>{{{institution}}}</h3>
+{{#area}}
+    <p>Area: {{.}}</p>
+{{/area}}
+{{#studyType}}
+    <p>Study Type: {{.}}</p>
+{{/studyType}}
+{{#startDate}}
+    <p>Start Date: {{.}}</p>
+{{/startDate}}
+{{#endDate}}
+    <p>End Date: {{.}}</p>
+{{/endDate}}
+{{#gpa}}
+    <p>GPA: {{gpa}}</p>
+{{/gpa}}
+{{#courses}}
+    <p>
+        Courses:
+        <ul>
+            {{#items}}
+                <li>{{.}}</li>
+            {{/items}}
+        </ul>
+    </p>
+{{/courses}}

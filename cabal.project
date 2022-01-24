@@ -4,3 +4,5 @@ packages:
 write-ghc-environment-files: always
 tests: true
 documentation: true
+
+allow-newer: network-uri-json:*
