@@ -24,3 +24,4 @@ cabal.project.local~
 .ghc.environment.*
 .shake
 build/
+result*

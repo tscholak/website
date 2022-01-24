@@ -20,7 +20,8 @@ jobs:
       with:
         name: tscholak
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
-    - run: nix build
+        signingKey: '${{ secrets.CACHIX_SIGNING_KEY }}'
+    - run: nix build -L
     - run: nix run .# -- -f config.json
     - uses: actions/upload-artifact@v2
       with:
