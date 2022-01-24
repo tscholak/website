@@ -35,9 +35,14 @@
         };
 
         website = haskellNix.website.components.exes.website;
-      in {
+      in rec {
         packages = {
           inherit website;
+        };
+
+        apps.website = utils.lib.mkApp {
+          drv = packages.website;
+          exePath = "/bin/website";
         };
 
         devShell = haskellNix.shellFor {
@@ -55,6 +60,8 @@
           exactDeps = true;
         };
 
-        defaultPackage = website;
+        defaultPackage = packages.website;
+
+        defaultApp = apps.website;
       });
 }
