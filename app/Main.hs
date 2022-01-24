@@ -648,14 +648,18 @@ buildBlogPost config postSrcPath = cacheAction ("build" :: T.Text, postSrcPath) 
       content = T.unpack $ fromMaybe mempty $ postData ^? A.key "content" . A._String
       withReadTime = A._Object . at "readTime" ?~ A.Integer (calcReadTime content)
       withGitHash = A._Object . at "gitHash" ?~ A.String (T.pack gitHash)
-      fullPostData = withSiteMeta config . withReadTime . withGitHash . withPostUrl $ postData
+      fullPostData = withReadTime . withGitHash . withPostUrl $ postData
   convert fullPostData
 
 -- | write blog post to file
 writeBlogPost :: Config Identity -> Article 'BlogPostKind -> Action ()
 writeBlogPost config post@BlogPost {..} = do
   postTemplate <- compileTemplate' "site/templates/post.html"
-  writeFile' (runIdentity (outputFolder config) </> bpUrl) . T.unpack . substitute postTemplate $ A.toJSON post
+  writeFile' (runIdentity (outputFolder config) </> bpUrl) . T.unpack
+    . substitute postTemplate
+    . withSiteMeta config
+    . A.toJSON
+    $ post
 
 -- | find and build all publications
 buildPublicationList :: Config Identity -> Action [Article 'PublicationKind]
@@ -683,14 +687,18 @@ buildPublication config publicationSrcPath = cacheAction ("build" :: T.Text, pub
   let publicationUrl = T.pack . dropDirectory1 $ publicationSrcPath -<.> "html"
       withPublicationUrl = A._Object . at "url" ?~ A.String publicationUrl
       withGitHash = A._Object . at "gitHash" ?~ A.String (T.pack gitHash)
-      fullPublicationData = withSiteMeta config . withPublicationUrl . withGitHash $ publicationData
+      fullPublicationData = withPublicationUrl . withGitHash $ publicationData
   convert fullPublicationData
 
 -- | write publication to file
 writePublication :: Config Identity -> Article 'PublicationKind -> Action ()
 writePublication config publication@Publication {..} = do
   publicationTemplate <- compileTemplate' "site/templates/publication.html"
-  writeFile' (runIdentity (outputFolder config) </> pubUrl) . T.unpack . substitute publicationTemplate $ A.toJSON publication
+  writeFile' (runIdentity (outputFolder config) </> pubUrl) . T.unpack
+    . substitute publicationTemplate
+    . withSiteMeta config
+    . A.toJSON
+    $ publication
 
 -- | find all tags and build tag pages
 buildTagList :: Config Identity -> [SomeArticle] -> Action [Tag]
