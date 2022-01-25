@@ -13,12 +13,16 @@ tags:
 > {-# LANGUAGE ScopedTypeVariables #-}
 > {-# LANGUAGE DerivingStrategies #-}
 > {-# LANGUAGE BangPatterns #-}
+> {-# LANGUAGE FlexibleContexts #-}
 > {-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 
 > module Unrecurse where
 
 > import Prelude hiding (even, odd)
-
+> import Control.Monad.Cont (ContT, MonadTrans (lift))
+> import Control.Monad.State (MonadState (get, put), modify, StateT)
+> import Control.Monad.Reader (ReaderT, MonadReader (ask, local))
+  
 Let's do some recursion.
 
 > even :: Int -> Bool
@@ -110,3 +114,118 @@ Let's do some recursion.
 > runFib = iterTrampoline fibHandler
 
 <https://www.pathsensitive.com/2019/07/the-best-refactoring-youve-never-heard.html>
+
+> data Tree a = Nil | Node {left :: Tree a, content :: a, right :: Tree a}
+>   deriving stock Functor
+
+> exampleTree :: Tree Int
+> exampleTree = Node (Node (Node Nil 1 Nil) 2 (Node Nil 3 Nil)) 4 (Node (Node Nil 5 Nil) 6 (Node Nil 7 Nil))
+
+> printTree :: forall a. Show a => Tree a -> IO ()
+> printTree Nil = pure ()
+> printTree Node {..} = do
+>   printTree left
+>   print content
+>   printTree right
+
+> printTree' :: forall a r. Show a => Tree a -> ContT r IO ()
+> printTree' Nil = pure ()
+> printTree' Node {..} = do
+>   printTree' left
+>   lift $ print content
+>   printTree' right
+
+> printTree'' :: forall a r. Show a => Tree a -> (() -> IO r) -> IO r
+> printTree'' Nil = \c -> c ()
+> printTree'' Node {..} =
+>    let first = \c -> printTree'' left c
+>        second = \c -> print content >>= c
+>        third = \c -> printTree'' right c
+>        inner = \c -> second (\x -> (\() -> third) x c)
+>        outer = \c -> first (\x -> (\() -> inner) x c)
+>    in outer
+
+```haskell
+printTree'' exampleTree (\() -> pure ()) :: IO ()
+```
+
+> data Kont a = First (Tree a) (Kont a) | Second a (Kont a) | Third (Tree a) (Kont a) | Finished
+>   deriving stock Functor
+
+> apply :: forall a. Show a => Kont a -> IO ()
+> apply (First left c) = printTree''' left c
+> apply (Second content c) = print content >> apply c
+> apply (Third right c) = printTree''' right c
+> apply Finished = pure ()
+
+> printTree''' :: forall a. Show a => Tree a -> Kont a -> IO ()
+> printTree''' Nil c = apply c
+> printTree''' Node {..} c = apply (First left (Second content (Third right c)))
+
+```haskell
+printTree''' exampleTree Finished :: IO ()
+```
+
+> printTree'''' :: forall a. Show a => Tree a -> Kont a -> IO ()
+> printTree'''' Nil (First left c) = printTree'''' left c
+> printTree'''' Nil (Second content c) = print content >> printTree'''' Nil c
+> printTree'''' Nil (Third right c) = printTree'''' right c
+> printTree'''' Nil Finished = pure ()
+> printTree'''' Node {..} c = printTree'''' Nil (First left (Second content (Third right c)))
+
+> while :: forall a m. Monad m => (a -> m Bool) -> (a -> m a) -> a -> m a
+> while p f x = p x >>= \b -> if b then f x >>= while p f else pure x
+
+> data Next a = First' (Tree a) | Second' a | Third' (Tree a)
+> type Stack a = [a]
+
+> push :: forall a m. MonadState (Stack a) m => a -> m ()
+> push x = modify (x:)
+
+> pop :: forall a m. MonadState (Stack a) m => m (Maybe a)
+> pop = do
+>   stack <- get
+>   case stack of
+>     [] -> pure Nothing
+>     (x:xs) -> do
+>       put xs
+>       pure (Just x)
+
+> printTree''''' :: forall a. Show a => Tree a -> StateT (Stack (Next a)) IO ()
+> printTree''''' Nil = do
+>   c <- pop
+>   case c of
+>     Just (First' left) -> printTree''''' left
+>     Just (Second' content) -> lift (print content) >> printTree''''' Nil
+>     Just (Third' right) -> printTree''''' right
+>     Nothing -> pure ()
+> printTree''''' Node {..} = do
+>   push (First' left)
+>   push (Second' content)
+>   push (Third' right)
+>   printTree''''' Nil
+
+```haskell
+runStateT (printTree''''' exampleTree) [] :: IO ()
+```
+
+> printTree'''''' :: forall a. Show a => ReaderT (Tree a) (StateT (Stack (Next a)) IO) ()
+> printTree'''''' = do
+>   tree <- ask
+>   case tree of
+>     Nil -> do
+>       c <- pop
+>       case c of
+>         Just (First' left) -> local (const left) printTree''''''
+>         Just (Second' content) -> lift (lift (print content)) >> local (const Nil) printTree''''''
+>         Just (Third' right) -> local (const right) printTree''''''
+>         Nothing -> pure ()
+>     Node {..} -> do
+>       push (First' left)
+>       push (Second' content)
+>       push (Third' right)
+>       local (const Nil) printTree''''''
+
+```haskell
+runStateT (runReaderT (printTree'''''' exampleTree) exampleTree) [] :: IO ()
+```
