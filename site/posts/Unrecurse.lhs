@@ -14,15 +14,25 @@ tags:
 > {-# LANGUAGE DerivingStrategies #-}
 > {-# LANGUAGE BangPatterns #-}
 > {-# LANGUAGE FlexibleContexts #-}
+> {-# LANGUAGE KindSignatures #-}
+> {-# LANGUAGE MultiParamTypeClasses #-}
+> {-# LANGUAGE DefaultSignatures #-}
+> {-# LANGUAGE FlexibleInstances #-}
+> {-# LANGUAGE TypeOperators #-}
+> {-# LANGUAGE UndecidableInstances #-}
+> {-# LANGUAGE DeriveGeneric #-}
 > {-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 
 > module Unrecurse where
 
 > import Prelude hiding (even, odd)
-> import Control.Lens (zoom, _1, _2)
+> import Control.Lens (zoom, _1, _2, uncons, Cons)
 > import Control.Monad.Cont (ContT, MonadTrans (lift))
-> import Control.Monad.State (MonadState (get, put), modify, StateT)
-> import Control.Monad (void)
+> import Control.Monad.State (MonadState (get, put), modify, StateT (runStateT), evalStateT)
+> import Control.Monad (void, MonadPlus, mfilter)
+> import Data.Kind (Type)
+> import GHC.Generics (Generic (Rep, from, to), K1 (unK1, K1), M1 (unM1, M1), type (:+:) (L1, R1), type (:*:) ((:*:)), V1, U1 (U1))
+> import Control.Applicative (Alternative((<|>), empty))
   
 Let's do some recursion.
 
@@ -117,7 +127,7 @@ Let's do some recursion.
 <https://www.pathsensitive.com/2019/07/the-best-refactoring-youve-never-heard.html>
 
 > data Tree a = Nil | Node {left :: Tree a, content :: a, right :: Tree a}
->   deriving stock Functor
+>   deriving stock (Eq, Show, Functor, Generic)
 
 > exampleTree :: Tree Int
 > exampleTree = Node (Node (Node Nil 1 Nil) 2 (Node Nil 3 Nil)) 4 (Node (Node Nil 5 Nil) 6 (Node Nil 7 Nil))
@@ -269,3 +279,112 @@ runStateT printTree'''''' (exampleTree, []) :: IO ()
 >         zoom _1 $ put Nil
 >         pure Continue
 >     ) Continue
+
+> data Token =
+>   L | R | Grow | Reduce | I Int
+>   deriving stock (Eq, Show)
+
+> type To t a = a -> t Token
+
+> type From b t a = StateT (t Token) b a
+
+> token :: forall b t. (MonadFail b, Cons (t Token) (t Token) Token Token) => From b t Token
+> token = do
+>   t <- get
+>   case uncons t of
+>     Nothing -> fail "unexpected end of input"
+>     Just (x, xs) -> put xs >> pure x
+
+> isToken :: (MonadFail b, MonadPlus b, Eq Token, Cons (t Token) (t Token) Token Token) => Token -> From b t Token
+> isToken t = mfilter (== t) token
+
+> class ToTokens (t :: Type -> Type) (a :: Type) where
+>   linearize :: To t a
+>   default linearize :: (Generic a, GToTokens t (Rep a)) => To t a
+>   linearize = gLinearize . from
+
+> class GToTokens (t :: Type -> Type) (f :: Type -> Type) where
+>   gLinearize :: forall a. To t (f a)
+
+> class FromTokens (b :: Type -> Type) (t :: Type -> Type) (a :: Type) where
+>   parse :: From b t a
+>   default parse :: (Functor b, Generic a, GFromTokens b t (Rep a)) => From b t a
+>   parse = to <$> gParse
+
+> class GFromTokens (b :: Type -> Type) (t :: Type -> Type) (f :: Type -> Type) where
+>   gParse :: forall a. From b t (f a)
+
+> instance GToTokens t V1 where
+>   gLinearize v = v `seq` error "GToTokens.V1"
+
+> instance Alternative t => GToTokens t U1 where
+>   gLinearize _ = empty
+
+> instance (Applicative t, Alternative t, GToTokens t f, GToTokens t g) => GToTokens t (f :+: g) where
+>   gLinearize (L1 x) = pure L <|> gLinearize x
+>   gLinearize (R1 x) = pure R <|> gLinearize x
+
+> instance (Alternative t, GToTokens t f, GToTokens t g) => GToTokens t (f :*: g) where
+>   gLinearize (x :*: y) = gLinearize x <|> gLinearize y
+
+> instance ToTokens t c => GToTokens t (K1 i c) where
+>   gLinearize = linearize . unK1
+
+> instance GToTokens t f => GToTokens t (M1 i c f) where
+>   gLinearize = gLinearize . unM1
+
+> instance MonadFail b => GFromTokens b t V1 where
+>   gParse = fail "GFromTokens.V1"
+
+> instance Monad b => GFromTokens b t U1 where
+>   gParse = pure U1
+
+> instance
+>   ( MonadFail b,
+>     MonadPlus b,
+>     Cons (t Token) (t Token) Token Token,
+>     GFromTokens b t f,
+>     GFromTokens b t g
+>   ) => GFromTokens b t (f :+: g) where
+>   gParse = (isToken L >> L1 <$> gParse) <|> (isToken R >> R1 <$> gParse)
+
+> instance (Monad b, GFromTokens b t f, GFromTokens b t g) => GFromTokens b t (f :*: g) where
+>   gParse = (:*:) <$> gParse <*> gParse
+
+> instance (Monad b, FromTokens b t c) => GFromTokens b t (K1 i c) where
+>   gParse = K1 <$> parse
+
+> instance (Functor b, GFromTokens b t f) => GFromTokens b t (M1 i c f) where
+>   gParse = M1 <$> gParse
+
+> instance (Alternative t) => ToTokens t Int where
+>   linearize i = pure $ I i
+
+> instance (Alternative t, ToTokens t a) => ToTokens t (Tree a)
+
+> instance (MonadFail b, Cons (t Token) (t Token) Token Token) => FromTokens b t Int where
+>   parse = do
+>     t <- token
+>     case t of
+>       I i -> pure i
+>       _ -> fail "expected Int"
+
+> instance
+>   ( MonadFail b,
+>     MonadPlus b,
+>     FromTokens b t a,
+>     Cons (t Token) (t Token) Token Token
+>   ) => FromTokens b t (Tree a)
+
+```haskell
+linearize @[] exampleTree
+```
+
+```haskell
+runStateT (parse @[] @[] @(Tree Int)) (linearize @[] exampleTree)
+```
+
+> -- shiftParse :: (_ -> From b t a) -> From b t a
+
+> -- resetParse :: From b t a -> From b t a
+> -- resetParse = lift . evalStateT
