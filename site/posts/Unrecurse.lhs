@@ -19,9 +19,10 @@ tags:
 > module Unrecurse where
 
 > import Prelude hiding (even, odd)
+> import Control.Lens (zoom, _1, _2)
 > import Control.Monad.Cont (ContT, MonadTrans (lift))
 > import Control.Monad.State (MonadState (get, put), modify, StateT)
-> import Control.Monad.Reader (ReaderT, MonadReader (ask, local))
+> import Control.Monad (void)
   
 Let's do some recursion.
 
@@ -173,9 +174,6 @@ printTree''' exampleTree Finished :: IO ()
 > printTree'''' Nil Finished = pure ()
 > printTree'''' Node {..} c = printTree'''' Nil (First left (Second content (Third right c)))
 
-> while :: forall a m. Monad m => (a -> m Bool) -> (a -> m a) -> a -> m a
-> while p f x = p x >>= \b -> if b then f x >>= while p f else pure x
-
 > data Next a = First' (Tree a) | Second' a | Third' (Tree a)
 > type Stack a = [a]
 
@@ -200,32 +198,74 @@ printTree''' exampleTree Finished :: IO ()
 >     Just (Third' right) -> printTree''''' right
 >     Nothing -> pure ()
 > printTree''''' Node {..} = do
->   push (First' left)
->   push (Second' content)
 >   push (Third' right)
+>   push (Second' content)
+>   push (First' left)
 >   printTree''''' Nil
 
 ```haskell
 runStateT (printTree''''' exampleTree) [] :: IO ()
 ```
 
-> printTree'''''' :: forall a. Show a => ReaderT (Tree a) (StateT (Stack (Next a)) IO) ()
+> printTree'''''' :: forall a. Show a => StateT (Tree a, Stack (Next a)) IO ()
 > printTree'''''' = do
->   tree <- ask
+>   tree <- zoom _1 get
 >   case tree of
 >     Nil -> do
->       c <- pop
+>       c <- zoom _2 pop
 >       case c of
->         Just (First' left) -> local (const left) printTree''''''
->         Just (Second' content) -> lift (lift (print content)) >> local (const Nil) printTree''''''
->         Just (Third' right) -> local (const right) printTree''''''
+>         Just (First' left) -> do
+>           zoom _1 $ put left 
+>           printTree''''''
+>         Just (Second' content) -> do
+>           lift (print content)
+>           zoom _1 $ put Nil
+>           printTree''''''
+>         Just (Third' right) -> do
+>           zoom _1 $ put right
+>           printTree''''''
 >         Nothing -> pure ()
 >     Node {..} -> do
->       push (First' left)
->       push (Second' content)
->       push (Third' right)
->       local (const Nil) printTree''''''
+>       zoom _2 $ push (Third' right)
+>       zoom _2 $ push (Second' content)
+>       zoom _2 $ push (First' left)
+>       zoom _1 $ put Nil
+>       printTree''''''
 
 ```haskell
-runStateT (runReaderT (printTree'''''' exampleTree) exampleTree) [] :: IO ()
+runStateT printTree'''''' (exampleTree, []) :: IO ()
 ```
+
+> while :: forall a m. Monad m => (a -> m Bool) -> (a -> m a) -> a -> m a
+> while p f x = p x >>= \b -> if b then f x >>= while p f else pure x
+
+> data Continue = Continue | Break
+
+> printTree''''''' :: forall a. Show a => StateT (Tree a, Stack (Next a)) IO ()
+> printTree''''''' =
+>   let p Continue = pure True
+>       p Break = pure False
+>   in void $ while p (\_ -> do
+>     tree <- zoom _1 get
+>     case tree of
+>       Nil -> do
+>         c <- zoom _2 pop
+>         case c of
+>           Just (First' left) -> do
+>             zoom _1 $ put left
+>             pure Continue
+>           Just (Second' content) -> do
+>             lift (print content)
+>             zoom _1 $ put Nil
+>             pure Continue
+>           Just (Third' right) -> do
+>             zoom _1 $ put right
+>             pure Continue
+>           Nothing -> pure Break
+>       Node {..} -> do
+>         zoom _2 $ push (Third' right)
+>         zoom _2 $ push (Second' content)
+>         zoom _2 $ push (First' left)
+>         zoom _1 $ put Nil
+>         pure Continue
+>     ) Continue
