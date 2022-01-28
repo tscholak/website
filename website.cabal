@@ -44,6 +44,7 @@ executable website
     , network-uri
     , network-uri-json
     , optparse-applicative
+    , recursion-schemes
     , pandoc
     , pandoc-types
     , process
