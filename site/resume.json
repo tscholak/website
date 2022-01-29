@@ -32,10 +32,18 @@
   },
   "work": [
     {
+      "company": "ServiceNow Research",
+      "highlights": [],
+      "position": "Sr Applied Research Scientist",
+      "startDate": "2022-01-28",
+      "website": "https://www.servicenow.com"
+    },
+    {
       "company": "ServiceNow",
       "highlights": [],
       "position": "Sr Applied Research Scientist",
       "startDate": "2021-08-01",
+      "endDate": "2022-01-27",
       "website": "https://www.servicenow.com"
     },
     {
