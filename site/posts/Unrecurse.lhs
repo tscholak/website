@@ -7,13 +7,13 @@ tags:
 ---
 
 > {-# LANGUAGE RankNTypes #-}
+> {-# LANGUAGE TypeApplications #-}
 > {-# LANGUAGE GADTs #-}
 > {-# LANGUAGE RecordWildCards #-}
 > {-# LANGUAGE DeriveTraversable #-}
 > {-# LANGUAGE TemplateHaskell #-}
 > {-# LANGUAGE TypeFamilies #-}
 > {-# LANGUAGE ScopedTypeVariables #-}
-> {-# LANGUAGE DerivingStrategies #-}
 > {-# LANGUAGE BangPatterns #-}
 > {-# LANGUAGE FlexibleContexts #-}
 > {-# LANGUAGE MultiParamTypeClasses #-}
@@ -22,13 +22,16 @@ tags:
 > {-# LANGUAGE TypeOperators #-}
 > {-# LANGUAGE UndecidableInstances #-}
 > {-# LANGUAGE DeriveGeneric #-}
+> {-# LANGUAGE DerivingVia #-}
+> {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+> {-# LANGUAGE StandaloneDeriving #-}
 > {-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 
 > module Unrecurse where
 
 > import Prelude hiding (even, odd)
 > import Control.Applicative (Alternative((<|>), empty))
-> import Control.Lens (zoom, _1, _2, uncons, Cons)
+> import Control.Lens (zoom, _1, _2, uncons, Cons(_Cons), from, bimapping, prism, Prism, withPrism)
 > import Control.Monad.Cont (ContT, MonadTrans (lift))
 > import Control.Monad.State (MonadState (get, put), modify, StateT (runStateT, StateT), evalStateT)
 > import Control.Monad (void, MonadPlus, mfilter)
@@ -38,6 +41,7 @@ tags:
 > import Control.Monad.Writer (Writer, tell)
 > import Data.Functor.Foldable.TH (makeBaseFunctor)
 > import Data.Functor.Foldable (Base)
+> import Data.Coerce (coerce)
   
 Let's do some recursion.
 
@@ -344,26 +348,44 @@ execWriter $ runStateT accumTree''''''' (Sum <$> exampleTree, [])
 >   L | R | P | I Int
 >   deriving stock (Eq, Show)
 
-> type Tape t = t (Token, Int)
+> newtype Tape t a = Tape { unTape :: t a }
+>   deriving stock (Eq, Show)
+>   deriving newtype (Functor, Applicative, Monad, Alternative)
 
-> type To t a = a -> Tape t
+> instance Cons (t a) (t b) a b => Cons (Tape t a) (Tape t b) a b where
+>   _Cons = withPrism cons' $ \review' preview' ->
+>     prism (coerce review') (coerce preview')
+>     where
+>       cons' :: Prism (t a) (t b) (a, t a) (b, t b)
+>       cons' = _Cons
 
-> type From b t a = StateT (Tape t) b a
+> type TTape t = Tape t (Token, Int)
 
-> token :: forall b t. (MonadFail b, Cons (Tape t) (Tape t) (Token, Int) (Token, Int)) => From b t (Token, Int)
+> type To t a = a -> TTape t
+
+> type From b t a = StateT (TTape t) b a
+
+> token :: forall b t.
+>   ( MonadFail b,
+>     Cons (TTape t) (TTape t) (Token, Int) (Token, Int)
+>   ) => From b t (Token, Int)
 > token = do
 >   t <- get
 >   case uncons t of
 >     Nothing -> fail "unexpected end of input"
 >     Just (x, xs) -> put xs >> pure x
 
-> isToken :: (MonadFail b, MonadPlus b, Eq Token, Cons (Tape t) (Tape t) (Token, Int) (Token, Int)) => Token -> From b t (Token, Int)
+> isToken :: forall b t.
+>   ( MonadFail b,
+>     MonadPlus b,
+>     Cons (TTape t) (TTape t) (Token, Int) (Token, Int)
+>   ) => Token -> From b t (Token, Int)
 > isToken t = mfilter (\ ~(t', _) -> t' == t) token
 
 > class ToTokens (t :: Type -> Type) (a :: Type) where
 >   linearize :: To t a
 >   default linearize :: (Generic a, GToTokens t (Rep a)) => To t a
->   linearize = gLinearize . from
+>   linearize = gLinearize . GHC.Generics.from
 
 > class GToTokens (t :: Type -> Type) (f :: Type -> Type) where
 >   gLinearize :: forall a. To t (f a)
@@ -377,32 +399,32 @@ execWriter $ runStateT accumTree''''''' (Sum <$> exampleTree, [])
 >   gParse :: forall a. From b t (f a)
 
 > class BStep (t :: Type -> Type) (base :: Type -> Type) where
->   bStep :: StateT (Tape t) Maybe (base (Tape t))
->   default bStep :: (Generic1 base, GBStep t (Rep1 base)) => StateT (Tape t) Maybe (base (Tape t))
->   bStep = to1 <$> gbStep
+>   bStep :: StateT (TTape t) Maybe (base (TTape t))
+>   default bStep :: (Generic (base (TTape t)), GBStep t (Rep (base (TTape t)))) => StateT (TTape t) Maybe (base (TTape t))
+>   bStep = to <$> gbStep
 
 > class GBStep (t :: Type -> Type) (f :: Type -> Type) where
->   gbStep :: forall a. StateT (Tape t) Maybe (f a)
+>   gbStep :: forall a. StateT (TTape t) Maybe (f a)
 
 > instance GToTokens t V1 where
 >   gLinearize v = v `seq` error "GToTokens.V1"
 
 > instance Alternative t => GToTokens t U1 where
->   gLinearize _ = empty
+>   gLinearize _ = Tape empty
 
 > instance (Applicative t, Alternative t, Foldable t, GToTokens t f, GToTokens t g) => GToTokens t (f :+: g) where
 >   gLinearize (L1 x) =
->      let x' = gLinearize x
->      in pure (L, length x') <|> x'
+>      let ~(Tape x') = gLinearize x
+>      in Tape $ pure (L, length x') <|> x'
 >   gLinearize (R1 x) =
->      let x' = gLinearize x
->      in pure (R, length x') <|> x'
+>      let ~(Tape x') = gLinearize x
+>      in Tape $ pure (R, length x') <|> x'
 
 > instance (Alternative t, Foldable t, GToTokens t f, GToTokens t g) => GToTokens t (f :*: g) where
 >   gLinearize (x :*: y) =
->     let x' = gLinearize x
->         y' = gLinearize y
->     in pure (P, length x' + length y') <|> x' <|> y'
+>     let ~(Tape x') = gLinearize x
+>         ~(Tape y') = gLinearize y
+>     in Tape $ pure (P, length x' + length y') <|> x' <|> y'
 
 > instance ToTokens t c => GToTokens t (K1 i c) where
 >   gLinearize = linearize . unK1
@@ -419,7 +441,7 @@ execWriter $ runStateT accumTree''''''' (Sum <$> exampleTree, [])
 > instance
 >   ( MonadFail b,
 >     MonadPlus b,
->     Cons (Tape t) (Tape t) (Token, Int) (Token, Int),
+>     Cons (TTape t) (TTape t) (Token, Int) (Token, Int),
 >     GFromTokens b t f,
 >     GFromTokens b t g
 >   ) => GFromTokens b t (f :+: g) where
@@ -428,7 +450,7 @@ execWriter $ runStateT accumTree''''''' (Sum <$> exampleTree, [])
 > instance
 >   ( MonadFail b, 
 >     MonadPlus b, 
->     Cons (Tape t) (Tape t) (Token, Int) (Token, Int),
+>     Cons (TTape t) (TTape t) (Token, Int) (Token, Int),
 >     GFromTokens b t f,
 >     GFromTokens b t g
 >   ) => GFromTokens b t (f :*: g) where
@@ -447,7 +469,7 @@ execWriter $ runStateT accumTree''''''' (Sum <$> exampleTree, [])
 >   gbStep = pure U1
 
 > instance
->   ( Cons (Tape t) (Tape t) (Token, Int) (Token, Int),
+>   ( Cons (TTape t) (TTape t) (Token, Int) (Token, Int),
 >     GBStep t f,
 >     GBStep t g
 >   ) => GBStep t (f :+: g) where
@@ -465,7 +487,7 @@ execWriter $ runStateT accumTree''''''' (Sum <$> exampleTree, [])
 
 > instance (Alternative t, Foldable t, ToTokens t a) => ToTokens t (Tree a)
 
-> instance (MonadFail b, Cons (Tape t) (Tape t) (Token, Int) (Token, Int)) => FromTokens b t Int where
+> instance (MonadFail b, Cons (TTape t) (TTape t) (Token, Int) (Token, Int)) => FromTokens b t Int where
 >   parse = do
 >     ~(t, _) <- token
 >     case t of
@@ -476,7 +498,7 @@ execWriter $ runStateT accumTree''''''' (Sum <$> exampleTree, [])
 >   ( MonadFail b,
 >     MonadPlus b,
 >     FromTokens b t a,
->     Cons (Tape t) (Tape t) (Token, Int) (Token, Int)
+>     Cons (TTape t) (TTape t) (Token, Int) (Token, Int)
 >   ) => FromTokens b t (Tree a)
 
 ```haskell
@@ -488,6 +510,9 @@ runStateT (parse @Maybe @[] @(Tree Int)) (linearize @[] exampleTree)
 ```
 
 > makeBaseFunctor ''Tree
+
+> deriving instance Generic (TreeF a r)
+> deriving instance Generic1 (TreeF a)
 
 newtype ContT r m a = ContT { runContT :: (a -> m r) -> m r }
 
