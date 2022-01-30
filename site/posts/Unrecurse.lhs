@@ -25,22 +25,23 @@ tags:
 > {-# LANGUAGE DerivingVia #-}
 > {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 > {-# LANGUAGE StandaloneDeriving #-}
+> {-# LANGUAGE LambdaCase #-}
 > {-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 
 > module Unrecurse where
 
 > import Prelude hiding (even, odd)
 > import Control.Applicative (Alternative((<|>), empty))
-> import Control.Lens (zoom, _1, _2, uncons, Cons(_Cons), from, bimapping, prism, Prism, withPrism)
+> import Control.Lens (zoom, _1, _2, uncons, Cons(_Cons), from, bimapping, prism, Prism, withPrism, cons)
 > import Control.Monad.Cont (ContT, MonadTrans (lift))
-> import Control.Monad.State (MonadState (get, put), modify, StateT (runStateT, StateT), evalStateT)
+> import Control.Monad.State (MonadState (get, put), modify, StateT (runStateT, StateT), evalStateT, execStateT)
 > import Control.Monad (void, MonadPlus, mfilter)
 > import Data.Functor.Identity (Identity)
 > import Data.Kind (Type)
 > import GHC.Generics (Generic (Rep, from, to), K1 (unK1, K1), M1 (unM1, M1), type (:+:) (L1, R1), type (:*:) ((:*:)), V1, U1 (U1), Generic1 (Rep1, to1), Par1, Rec1)
 > import Control.Monad.Writer (Writer, tell)
 > import Data.Functor.Foldable.TH (makeBaseFunctor)
-> import Data.Functor.Foldable (Base)
+> import Data.Functor.Foldable (Base, Recursive (cata), Corecursive (ana, embed))
 > import Data.Coerce (coerce)
   
 Let's do some recursion.
@@ -137,6 +138,11 @@ Let's do some recursion.
 
 > data Tree a = Nil | Node {left :: Tree a, content :: a, right :: Tree a}
 >   deriving stock (Eq, Show, Functor, Generic)
+
+> makeBaseFunctor ''Tree
+
+> deriving instance (Show a, Show r) => Show (TreeF a r)
+> deriving instance Generic (TreeF a r)
 
 > exampleTree :: Tree Int
 > exampleTree = Node (Node (Node Nil 1 Nil) 2 (Node Nil 3 Nil)) 4 (Node (Node Nil 5 Nil) 6 (Node Nil 7 Nil))
@@ -345,12 +351,12 @@ execWriter $ runStateT accumTree''''''' (Sum <$> exampleTree, [])
 ```
 
 > data Token =
->   L | R | P | I Int
+>   Rec Int | L | R | I Int
 >   deriving stock (Eq, Show)
 
 > newtype Tape t a = Tape { unTape :: t a }
 >   deriving stock (Eq, Show)
->   deriving newtype (Functor, Applicative, Monad, Alternative)
+>   deriving newtype (Functor, Applicative, Monad, Alternative, Foldable)
 
 > instance Cons (t a) (t b) a b => Cons (Tape t a) (Tape t b) a b where
 >   _Cons = withPrism cons' $ \review' preview' ->
@@ -359,7 +365,7 @@ execWriter $ runStateT accumTree''''''' (Sum <$> exampleTree, [])
 >       cons' :: Prism (t a) (t b) (a, t a) (b, t b)
 >       cons' = _Cons
 
-> type TTape t = Tape t (Token, Int)
+> type TTape t = Tape t Token
 
 > type To t a = a -> TTape t
 
@@ -367,8 +373,8 @@ execWriter $ runStateT accumTree''''''' (Sum <$> exampleTree, [])
 
 > token :: forall b t.
 >   ( MonadFail b,
->     Cons (TTape t) (TTape t) (Token, Int) (Token, Int)
->   ) => From b t (Token, Int)
+>     Cons (TTape t) (TTape t) Token Token
+>   ) => From b t Token
 > token = do
 >   t <- get
 >   case uncons t of
@@ -378,33 +384,25 @@ execWriter $ runStateT accumTree''''''' (Sum <$> exampleTree, [])
 > isToken :: forall b t.
 >   ( MonadFail b,
 >     MonadPlus b,
->     Cons (TTape t) (TTape t) (Token, Int) (Token, Int)
->   ) => Token -> From b t (Token, Int)
-> isToken t = mfilter (\ ~(t', _) -> t' == t) token
+>     Cons (TTape t) (TTape t) Token Token
+>   ) => Token -> From b t Token
+> isToken t = mfilter (== t) token
 
 > class ToTokens (t :: Type -> Type) (a :: Type) where
 >   linearize :: To t a
->   default linearize :: (Generic a, GToTokens t (Rep a)) => To t a
->   linearize = gLinearize . GHC.Generics.from
+>   default linearize :: (Recursive a, Alternative t, Foldable t, Generic (Base a (TTape t)), GToTokens t (Rep (Base a (TTape t)))) => To t a
+>   linearize = cata (gLinearize . GHC.Generics.from)
+
+> instance (Alternative t) => ToTokens t Int where
+>   linearize i = pure (I i)
+
+> instance (Applicative t, Alternative t, Foldable t) => ToTokens t (TTape t) where
+>   linearize tape = pure (Rec $ length tape) <|> tape
+
+> instance (Recursive (Tree a), Alternative t, Foldable t, Generic (Base (Tree a) (TTape t)), GToTokens t (Rep (Base (Tree a) (TTape t)))) => ToTokens t (Tree a)
 
 > class GToTokens (t :: Type -> Type) (f :: Type -> Type) where
 >   gLinearize :: forall a. To t (f a)
-
-> class FromTokens (b :: Type -> Type) (t :: Type -> Type) (a :: Type) where
->   parse :: From b t a
->   default parse :: (Functor b, Generic a, GFromTokens b t (Rep a)) => From b t a
->   parse = to <$> gParse
-
-> class GFromTokens (b :: Type -> Type) (t :: Type -> Type) (f :: Type -> Type) where
->   gParse :: forall a. From b t (f a)
-
-> class BStep (t :: Type -> Type) (base :: Type -> Type) where
->   bStep :: StateT (TTape t) Maybe (base (TTape t))
->   default bStep :: (Generic (base (TTape t)), GBStep t (Rep (base (TTape t)))) => StateT (TTape t) Maybe (base (TTape t))
->   bStep = to <$> gbStep
-
-> class GBStep (t :: Type -> Type) (f :: Type -> Type) where
->   gbStep :: forall a. StateT (TTape t) Maybe (f a)
 
 > instance GToTokens t V1 where
 >   gLinearize v = v `seq` error "GToTokens.V1"
@@ -413,18 +411,11 @@ execWriter $ runStateT accumTree''''''' (Sum <$> exampleTree, [])
 >   gLinearize _ = Tape empty
 
 > instance (Applicative t, Alternative t, Foldable t, GToTokens t f, GToTokens t g) => GToTokens t (f :+: g) where
->   gLinearize (L1 x) =
->      let ~(Tape x') = gLinearize x
->      in Tape $ pure (L, length x') <|> x'
->   gLinearize (R1 x) =
->      let ~(Tape x') = gLinearize x
->      in Tape $ pure (R, length x') <|> x'
+>   gLinearize (L1 x) = pure L <|> gLinearize x
+>   gLinearize (R1 x) = pure R <|> gLinearize x
 
 > instance (Alternative t, Foldable t, GToTokens t f, GToTokens t g) => GToTokens t (f :*: g) where
->   gLinearize (x :*: y) =
->     let ~(Tape x') = gLinearize x
->         ~(Tape y') = gLinearize y
->     in Tape $ pure (P, length x' + length y') <|> x' <|> y'
+>   gLinearize (x :*: y) = gLinearize x <|> gLinearize y
 
 > instance ToTokens t c => GToTokens t (K1 i c) where
 >   gLinearize = linearize . unK1
@@ -432,135 +423,69 @@ execWriter $ runStateT accumTree''''''' (Sum <$> exampleTree, [])
 > instance GToTokens t f => GToTokens t (M1 i c f) where
 >   gLinearize = gLinearize . unM1
 
-> instance MonadFail b => GFromTokens b t V1 where
->   gParse = fail "GFromTokens.V1"
+> class FromTokensStep (b :: Type -> Type) (t :: Type -> Type) (base :: Type -> Type) where
+>   parseStep :: From b t (base (TTape t))
+>   default parseStep :: (Functor b, Generic (base (TTape t)), GFromTokensStep b t (Rep (base (TTape t)))) => From b t (base (TTape t))
+>   parseStep = to <$> gParseStep
 
-> instance Monad b => GFromTokens b t U1 where
->   gParse = pure U1
+> class GFromTokensStep (b :: Type -> Type) (t :: Type -> Type) (f :: Type -> Type) where
+>   gParseStep :: forall a. From b t (f a)
+
+> instance MonadFail b => GFromTokensStep b t V1 where
+>   gParseStep = fail "GFromTokensStep.V1"
+
+> instance Monad b => GFromTokensStep b t U1 where
+>   gParseStep = pure U1
 
 > instance
 >   ( MonadFail b,
 >     MonadPlus b,
->     Cons (TTape t) (TTape t) (Token, Int) (Token, Int),
->     GFromTokens b t f,
->     GFromTokens b t g
->   ) => GFromTokens b t (f :+: g) where
->   gParse = (isToken L >> L1 <$> gParse) <|> (isToken R >> R1 <$> gParse)
+>     Cons (TTape t) (TTape t) Token Token,
+>     GFromTokensStep b t f,
+>     GFromTokensStep b t g
+>   ) => GFromTokensStep b t (f :+: g) where
+>   gParseStep = (isToken L >> L1 <$> gParseStep) <|> (isToken R >> R1 <$> gParseStep)
 
 > instance
 >   ( MonadFail b, 
 >     MonadPlus b, 
->     Cons (TTape t) (TTape t) (Token, Int) (Token, Int),
->     GFromTokens b t f,
->     GFromTokens b t g
->   ) => GFromTokens b t (f :*: g) where
->   gParse = isToken P >> ((:*:) <$> gParse <*> gParse)
+>     Cons (TTape t) (TTape t) Token Token,
+>     GFromTokensStep b t f,
+>     GFromTokensStep b t g
+>   ) => GFromTokensStep b t (f :*: g) where
+>   gParseStep = (:*:) <$> gParseStep <*> gParseStep
 
-> instance (Monad b, FromTokens b t c) => GFromTokens b t (K1 i c) where
->   gParse = K1 <$> parse
+> instance (Monad b, FromTokens b t c) => GFromTokensStep b t (K1 i c) where
+>   gParseStep = K1 <$> parse
 
-> instance (Functor b, GFromTokens b t f) => GFromTokens b t (M1 i c f) where
->   gParse = M1 <$> gParse
+> instance (Functor b, GFromTokensStep b t f) => GFromTokensStep b t (M1 i c f) where
+>   gParseStep = M1 <$> gParseStep
 
-> instance GBStep t V1 where
->   gbStep = fail "GBStep.V1"
+> instance (MonadFail b, MonadPlus b, Cons (t Token) (t Token) Token Token, Alternative t) => FromTokensStep b t (TreeF Int)
 
-> instance GBStep t U1 where
->   gbStep = pure U1
+> resetParse :: Monad b => From b t a -> TTape t -> From b t a
+> resetParse m = lift . evalStateT m 
 
-> instance
->   ( Cons (TTape t) (TTape t) (Token, Int) (Token, Int),
->     GBStep t f,
->     GBStep t g
->   ) => GBStep t (f :+: g) where
->   gbStep = (isToken L >> L1 <$> gbStep) <|> (isToken R >> R1 <$> gbStep)
+> class FromTokens (b :: Type -> Type) (t :: Type -> Type) (a :: Type) where
+>   parse :: From b t a
+>   default parse :: (Corecursive a, Monad b, Traversable (Base a), FromTokensStep b t (Base a)) => From b t a
+>   parse = go where go = fmap embed $ parseStep >>= traverse (resetParse go) 
 
-> instance GBStep t Par1 where
->   gbStep = undefined
-
-> instance GBStep t (Rec1 f) where
->   gbStep = undefined
-
-
-> instance (Alternative t) => ToTokens t Int where
->   linearize i = pure (I i, 0)
-
-> instance (Alternative t, Foldable t, ToTokens t a) => ToTokens t (Tree a)
-
-> instance (MonadFail b, Cons (TTape t) (TTape t) (Token, Int) (Token, Int)) => FromTokens b t Int where
->   parse = do
->     ~(t, _) <- token
->     case t of
+> instance (MonadFail b, Cons (TTape t) (TTape t) Token Token) => FromTokens b t Int where
+>   parse = token >>= \case
 >       I i -> pure i
 >       _ -> fail "expected Int"
 
-> instance
->   ( MonadFail b,
->     MonadPlus b,
->     FromTokens b t a,
->     Cons (TTape t) (TTape t) (Token, Int) (Token, Int)
->   ) => FromTokens b t (Tree a)
+> instance (MonadFail b, Alternative t, Cons (TTape t) (TTape t) Token Token) => FromTokens b t (TTape t) where
+>   parse = token >>= \case
+>     Rec n -> go n
+>       where go :: Int -> From b t (TTape t)
+>             go 0 = pure empty
+>             go n' = cons <$> token <*> go (n' - 1)
+>     _ -> fail "expected Rec"
 
-```haskell
-linearize @[] exampleTree
+> instance (Monad b, FromTokensStep b t (TreeF a)) => FromTokens b t (Tree a)
+
 ```
-
-```haskell
-runStateT (parse @Maybe @[] @(Tree Int)) (linearize @[] exampleTree)
+evalStateT parse (linearize @[] exampleTree) == Just exampleTree
 ```
-
-> makeBaseFunctor ''Tree
-
-> deriving instance Generic (TreeF a r)
-> deriving instance Generic1 (TreeF a)
-
-newtype ContT r m a = ContT { runContT :: (a -> m r) -> m r }
-
-() -> m a
-
-evalContT :: (Monad m) => ContT r m r -> m r
-evalContT m = runContT m return
-
-lift c = ContT $ \k -> c >>= k
-
-https://stackoverflow.com/questions/43695653/cont-monad-shift
-
-resetT :: Monad m => ContT r m r -> ContT r' m r
-resetT = lift . evalContT
-
-shiftT :: (Monad m) => ((a -> m r) -> ContT r m r) -> ContT r m a
-shiftT f = ContT (evalContT . f)
-
-newtype StateT s m a = StateT { runStateT :: s -> m (a, s) }
-
-https://wiki.haskell.org/Contstuff
-https://hackage.haskell.org/package/contstuff-1.2.6/docs/Control-ContStuff-Trans.html#t:StateT
-
-> newtype StateT' r s m a = StateT' { runStateT' :: (a -> s -> m r) -> s -> m r }
-
-s -> m (a, s)
-
-> instance MonadTrans (StateT' r s) where
->   lift c = StateT' $ \k s -> c >>= flip k s
-
-> evalStateT' :: Applicative m => StateT' r s m r -> s -> m r
-> evalStateT' (StateT' c) s = c (\x -> const (pure x)) s
-
-> resetStateT' :: Monad m => StateT' r s m r -> s -> StateT' r' s m r
-> resetStateT' m = lift . evalStateT' m
-
-> shiftState' :: (Monad m) => ((a -> s -> m r) -> StateT' r s m r)  -> StateT' r s m a
-> shiftState' f = StateT' (evalStateT' . f)
-
-evalStateT :: StateT (t Token) b a -> t Token -> b a
-
-newtype StateT (t Token) b a = StateT { runStateT :: t Token -> b (a, t Token) }
-
-runStateT = \t -> evalStateT s t
-
-> -- resetParse :: Monad b => From b t a -> t Token -> From b t a
-> -- resetParse m = lift . evalStateT m 
-> -- type From b t a = StateT (t Token) b a
-> -- evalStateT :: Monad m => StateT s m a -> s -> m a
-> -- evalStateT :: Monad m => From b t a -> t Token -> b a
-> -- lift :: Monad m => b a -> From b t a
