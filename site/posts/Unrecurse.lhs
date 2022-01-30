@@ -502,7 +502,7 @@ evalStateT parse (linearize @[] exampleTree) == Just exampleTree
 
 > data NextF a r = FirstF r | SecondF a | ThirdF r
 
-> accumTree'''''''' :: forall a. (Monoid a, ToTokens [] a, FromTokens Maybe [] a) => StateT (TTape [], Stack (NextF a (TTape []))) (Writer a) ()
+> accumTree'''''''' :: forall t a. (Alternative t, Foldable t, Monoid a, ToTokens t a, FromTokens Maybe t a, Cons (t Token) (t Token) Token Token) => StateT (TTape t, Stack (NextF a (TTape t))) (Writer a) ()
 > accumTree'''''''' =
 >   while $ do
 >     treeF <- fromJust . evalStateT parseStep <$> zoom _1 get
@@ -542,5 +542,5 @@ evalStateT parse (linearize @[] exampleTree) == Just exampleTree
 > instance (Monad b, Alternative t, Foldable t, FromTokens b t a) => FromTokens b t (Sum a)
 
 ```
-execWriter @(Sum Int) $ runStateT accumTree'''''''' (Sum <$> exampleTree, [])
+execWriter $ runStateT (accumTree'''''''' @Vector @(Sum Int)) (linearize $ Sum <$> exampleTree, [])
 ```
