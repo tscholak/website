@@ -43,6 +43,9 @@ tags:
 > import Data.Functor.Foldable.TH (makeBaseFunctor)
 > import Data.Functor.Foldable (Base, Recursive (cata), Corecursive (ana, embed))
 > import Data.Coerce (coerce)
+> import Control.Monad.Trans.Maybe (runMaybeT)
+> import Data.Maybe (fromJust)
+> import Data.Monoid (Sum (..))
   
 Let's do some recursion.
 
@@ -141,8 +144,8 @@ Let's do some recursion.
 
 > makeBaseFunctor ''Tree
 
-> deriving instance (Show a, Show r) => Show (TreeF a r)
-> deriving instance Generic (TreeF a r)
+> deriving stock instance (Show a, Show r) => Show (TreeF a r)
+> deriving stock instance Generic (TreeF a r)
 
 > exampleTree :: Tree Int
 > exampleTree = Node (Node (Node Nil 1 Nil) 2 (Node Nil 3 Nil)) 4 (Node (Node Nil 5 Nil) 6 (Node Nil 7 Nil))
@@ -390,38 +393,45 @@ execWriter $ runStateT accumTree''''''' (Sum <$> exampleTree, [])
 
 > class ToTokens (t :: Type -> Type) (a :: Type) where
 >   linearize :: To t a
->   default linearize :: (Recursive a, Alternative t, Foldable t, Generic (Base a (TTape t)), GToTokens t (Rep (Base a (TTape t)))) => To t a
->   linearize = cata (gLinearize . GHC.Generics.from)
+>   default linearize :: (Recursive a, ToTokensStep t (Base a)) => To t a
+>   linearize = cata linearizeStep
 
 > instance (Alternative t) => ToTokens t Int where
 >   linearize i = pure (I i)
 
-> instance (Applicative t, Alternative t, Foldable t) => ToTokens t (TTape t) where
+> instance (Alternative t, Foldable t) => ToTokens t (TTape t) where
 >   linearize tape = pure (Rec $ length tape) <|> tape
 
-> instance (Recursive (Tree a), Alternative t, Foldable t, Generic (Base (Tree a) (TTape t)), GToTokens t (Rep (Base (Tree a) (TTape t)))) => ToTokens t (Tree a)
+> class ToTokensStep (t :: Type -> Type) (base :: Type -> Type) where
+>   linearizeStep :: To t (base (TTape t))
+>   default linearizeStep :: (Alternative t, Foldable t, Generic (base (TTape t)), GToTokensStep t (Rep (base (TTape t)))) => To t (base (TTape t))
+>   linearizeStep = gLinearizeStep . GHC.Generics.from
 
-> class GToTokens (t :: Type -> Type) (f :: Type -> Type) where
->   gLinearize :: forall a. To t (f a)
+> instance (Alternative t, Foldable t, ToTokens t a) => ToTokensStep t (TreeF a)
 
-> instance GToTokens t V1 where
->   gLinearize v = v `seq` error "GToTokens.V1"
+> instance (ToTokensStep t (TreeF a)) => ToTokens t (Tree a)
 
-> instance Alternative t => GToTokens t U1 where
->   gLinearize _ = Tape empty
+> class GToTokensStep (t :: Type -> Type) (f :: Type -> Type) where
+>   gLinearizeStep :: forall a. To t (f a)
 
-> instance (Applicative t, Alternative t, Foldable t, GToTokens t f, GToTokens t g) => GToTokens t (f :+: g) where
->   gLinearize (L1 x) = pure L <|> gLinearize x
->   gLinearize (R1 x) = pure R <|> gLinearize x
+> instance GToTokensStep t V1 where
+>   gLinearizeStep v = v `seq` error "GToTokensStep.V1"
 
-> instance (Alternative t, Foldable t, GToTokens t f, GToTokens t g) => GToTokens t (f :*: g) where
->   gLinearize (x :*: y) = gLinearize x <|> gLinearize y
+> instance Alternative t => GToTokensStep t U1 where
+>   gLinearizeStep _ = Tape empty
 
-> instance ToTokens t c => GToTokens t (K1 i c) where
->   gLinearize = linearize . unK1
+> instance (Applicative t, Alternative t, Foldable t, GToTokensStep t f, GToTokensStep t g) => GToTokensStep t (f :+: g) where
+>   gLinearizeStep (L1 x) = pure L <|> gLinearizeStep x
+>   gLinearizeStep (R1 x) = pure R <|> gLinearizeStep x
 
-> instance GToTokens t f => GToTokens t (M1 i c f) where
->   gLinearize = gLinearize . unM1
+> instance (Alternative t, Foldable t, GToTokensStep t f, GToTokensStep t g) => GToTokensStep t (f :*: g) where
+>   gLinearizeStep (x :*: y) = gLinearizeStep x <|> gLinearizeStep y
+
+> instance ToTokens t c => GToTokensStep t (K1 i c) where
+>   gLinearizeStep = linearize . unK1
+
+> instance GToTokensStep t f => GToTokensStep t (M1 i c f) where
+>   gLinearizeStep = gLinearizeStep . unM1
 
 > class FromTokensStep (b :: Type -> Type) (t :: Type -> Type) (base :: Type -> Type) where
 >   parseStep :: From b t (base (TTape t))
@@ -461,7 +471,7 @@ execWriter $ runStateT accumTree''''''' (Sum <$> exampleTree, [])
 > instance (Functor b, GFromTokensStep b t f) => GFromTokensStep b t (M1 i c f) where
 >   gParseStep = M1 <$> gParseStep
 
-> instance (MonadFail b, MonadPlus b, Cons (t Token) (t Token) Token Token, Alternative t) => FromTokensStep b t (TreeF Int)
+> instance (MonadFail b, MonadPlus b, Cons (t Token) (t Token) Token Token, Alternative t, FromTokens b t a) => FromTokensStep b t (TreeF a)
 
 > resetParse :: Monad b => From b t a -> TTape t -> From b t a
 > resetParse m = lift . evalStateT m 
@@ -488,4 +498,49 @@ execWriter $ runStateT accumTree''''''' (Sum <$> exampleTree, [])
 
 ```
 evalStateT parse (linearize @[] exampleTree) == Just exampleTree
+```
+
+> data NextF a r = FirstF r | SecondF a | ThirdF r
+
+> accumTree'''''''' :: forall a. (Monoid a, ToTokens [] a, FromTokens Maybe [] a) => StateT (TTape [], Stack (NextF a (TTape []))) (Writer a) ()
+> accumTree'''''''' =
+>   while $ do
+>     treeF <- fromJust . evalStateT parseStep <$> zoom _1 get
+>     case treeF of
+>       NilF -> do
+>         c <- zoom _2 pop
+>         case c of
+>           Just (FirstF leftF) -> do
+>             zoom _1 $ put leftF
+>             pure Continue
+>           Just (SecondF contentF) -> do
+>             lift (tell contentF)
+>             zoom _1 $ put (linearizeStep $ NilF @a)
+>             pure Continue
+>           Just (ThirdF rightF) -> do
+>             zoom _1 $ put rightF
+>             pure Continue
+>           Nothing -> pure Break
+>       NodeF {..} -> do
+>         zoom _2 $ push (ThirdF rightF)
+>         zoom _2 $ push (SecondF contentF)
+>         zoom _2 $ push (FirstF leftF)
+>         zoom _1 $ put (linearizeStep $ NilF @a)
+>         pure Continue
+
+> makeBaseFunctor ''Sum
+
+> deriving stock instance (Show a, Show r) => Show (SumF a r)
+> deriving stock instance Generic (SumF a r)
+
+> instance (Alternative t, Foldable t, ToTokens t a) => ToTokensStep t (SumF a)
+
+> instance (Alternative t, Foldable t, ToTokens t a) => ToTokens t (Sum a)
+
+> instance (Monad b, Alternative t, Foldable t, FromTokens b t a) => FromTokensStep b t (SumF a)
+
+> instance (Monad b, Alternative t, Foldable t, FromTokens b t a) => FromTokens b t (Sum a)
+
+```
+execWriter @(Sum Int) $ runStateT accumTree'''''''' (Sum <$> exampleTree, [])
 ```
