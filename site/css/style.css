@@ -9,7 +9,7 @@
 body {
   background-color: var(--bg);
   color: var(--text);
-  font-family: "PragmataProLiga-Regular", monospace;
+  font-family: "PragmataPro", monospace;
   padding: 0px;
   margin: 0px;
   margin-left: auto;
@@ -151,7 +151,7 @@ pre {
 
 code {
   font-weight: bold;
-  font-family: "PragmataProLiga-Regular", monospace;
+  font-family: "PragmataPro", monospace;
 }
 
 pre > code {
