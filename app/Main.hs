@@ -28,6 +28,7 @@ import Control.Monad (void)
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import Data.Aeson (toJSON)
 import qualified Data.Aeson as A (FromJSON (parseJSON), KeyValue ((.=)), Options (..), Result (Error, Success), ToJSON (toEncoding, toJSON), Value (..), decode', defaultOptions, fromJSON, genericParseJSON, genericToEncoding, genericToJSON, object, withObject, (.:), (.:?))
+import qualified Data.Aeson.KeyMap as KM (mapMaybe, singleton, union)
 import qualified Data.Aeson.Lens as A (AsPrimitive (_String), AsValue (_Object), key, pattern Integer)
 import qualified Data.Aeson.Parser.Internal as A (jsonEOF')
 import qualified Data.Attoparsec.ByteString as Atto
@@ -36,7 +37,6 @@ import Data.Either.Validation (Validation)
 import qualified Data.Either.Validation as Validation
 import Data.Functor.Compose (Compose (Compose))
 import Data.Functor.Identity (Identity (..))
-import qualified Data.HashMap.Lazy as HML
 import Data.List (sortOn)
 import qualified Data.List as List
 import Data.List.NonEmpty (NonEmpty)
@@ -126,7 +126,7 @@ codeToHTML = markdownToHTMLWithOpts opts defaultHtml5Options
 
 -- | add site meta data to a JSON object
 withSiteMeta :: Config Identity -> A.Value -> A.Value
-withSiteMeta config (A.Object obj) = A.Object $ HML.union obj siteMetaObj
+withSiteMeta config (A.Object obj) = A.Object $ KM.union obj siteMetaObj
   where
     A.Object siteMetaObj = A.toJSON . siteMeta $ config
 withSiteMeta _ v = error $ "only add site meta to objects, not " ++ show v
@@ -772,11 +772,11 @@ buildResume config = cacheAction ("build" :: T.Text, resumeSrcPath) $ do
             go json
         where
           go :: A.Value -> Maybe A.Value
-          go (A.Object a) = Just . A.Object $ HML.mapMaybe go a
+          go (A.Object a) = Just . A.Object $ KM.mapMaybe go a
           go (A.Array a) = case V.mapMaybe go a of
             a'
               | null a -> Nothing
-              | otherwise -> Just . A.Object . HML.singleton "items" . A.Array $ a'
+              | otherwise -> Just . A.Object . KM.singleton "items" . A.Array $ a'
           go x = Just x
   let withGitHash = A._Object . at "gitHash" ?~ A.String (T.pack gitHash)
       fullResumeData = withSiteMeta config . withGitHash $ resumeData

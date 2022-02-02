@@ -6,3 +6,9 @@ tests: true
 documentation: true
 
 allow-newer: network-uri-json:*
+
+source-repository-package
+    type: git
+    location: https://github.com/tscholak/slick
+    tag: f7cf16a0892f2479dec5db2f1ae5bf5256db07a3
+    --sha256: sha256-ENPnfyFI2/LLXJP5cQ6sb2tIQ/6PKfB61XMYF7W8Qm4
