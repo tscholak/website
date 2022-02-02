@@ -1,11 +1,12 @@
 ---
-title: "Unrecurse -- A Recursive Function That doesn't Recurse"
+title: "Unrecurse -- A Recursive Function That Doesn't Recurse"
 date: Jan 20, 2022
 teaser: >
   Have you ever wanted to write a recursive function and wondered
   what would happen if someone took away recursion from Haskell?
-  No recursive function calls, no recursive data types. How sad Haskell would be.
+  No recursive function calls, no recursive data types. How sad Haskell would be!
   I'm sure that thought must have occured to you.
+  (If not, what are you even doing here?)
   Well, this article has you covered should that day ever come.
   After reading it, you will know how to write
   a recursive function that doesn't recurse.
@@ -42,7 +43,8 @@ Nothing extraordinarily fancy, just the usually fancy Haskell flavour.
 \end{code}
 
 A bunch of these are part of
-[GHC2021](https://ghc.gitlab.haskell.org/ghc/doc/users_guide/exts/control.html#extension-GHC2021),
+[GHC2021](https://ghc.gitlab.haskell.org/ghc/doc/users_guide/exts/control.html#extension-GHC2021)
+that was introduced in GHC 9.2,
 but this blog is boring and still running on GHC 8.10.
 
 Unsurprisingly, we will also work with code that is not in the `Prelude`:
@@ -278,7 +280,8 @@ The `()` type of the argument is a consequence of the fact that
 the original `printTree` function returned a value of type `IO ()`.
 
 Let's take a look at the `Node` case of `printTree''`.
-The `do` notation is desugared into nested continuations.
+The `do` notation is [desugared](https://en.wikipedia.org/wiki/Syntactic_sugar)
+into nested continuations.
 `inner` chains the `second` and `third` functions,
 and `outer` chains the `first` and `inner` functions.
 `first` happens first, then `second`, and then `third`.
@@ -386,7 +389,7 @@ and then call `apply` to execute the corresponding actions:
       )
 \end{code}
 
-How do we know that all this is all working correctly?
+How do we know that this is all working correctly?
 We can run it:
 
 \begin{code}
@@ -460,7 +463,7 @@ we are going to update the `State` with the arguments' values.
 In preparation for this, let us have a closer look at `Kont`.
 You may have already noticed, but our `Kont` is isomorphic to `[]`:
 `Finished` is the empty list, and `More` is simply the list constructor.
-Let's acknowledge that fact by using the `[]` constructor directly
+Let's acknowledge that fact by using the `[]` data type directly
 and by giving `Kont` a better name: `Stack`.
 
 \begin{code}
@@ -641,6 +644,7 @@ With this, we finally have:
 
 There are no recursive calls left.
 Well, almost, because we are still using the recursive `Tree` type.
+We will worry about that later.
 
 This marvel of a function still computes the same result,
 
