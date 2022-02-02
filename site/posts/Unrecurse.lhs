@@ -1,15 +1,25 @@
 ---
-title: "Unrecurse"
+title: "Unrecurse -- A Recursive Function That doesn't Recurse"
 date: Jan 20, 2022
-teaser: Let's play with recursion!
+teaser: >
+  Have you ever wanted to write a recursive function and wondered
+  what would happen if someone took away recursion from Haskell?
+  No recursive function calls, no recursive data types. How sad Haskell would be.
+  I'm sure that thought must have occured to you.
+  Well, this article has you covered should that day ever come.
+  After reading it, you will know how to write
+  a recursive function that doesn't recurse.
 tags:
   items: [haskell]
 ---
 
-A few language extensions are required.
+Preliminaries
+-------------
+
+For this literal Haskell essay, a few language extensions are required.
+Nothing extraordinarily fancy, just the usually fancy Haskell flavour.
 
 \begin{code}
-  {-# LANGUAGE RankNTypes #-}
   {-# LANGUAGE TypeApplications #-}
   {-# LANGUAGE GADTs #-}
   {-# LANGUAGE RecordWildCards #-}
@@ -32,7 +42,11 @@ A few language extensions are required.
   {-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 \end{code}
 
-These are the imports we need.
+A bunch of these are part of
+[GHC2021](https://ghc.gitlab.haskell.org/ghc/doc/users_guide/exts/control.html#extension-GHC2021),
+but this blog is boring and still running on GHC 8.10.
+
+Unsurprisingly, we will also work with code that is not in the standard library:
 
 \begin{code}
   module Unrecurse where
@@ -76,144 +90,29 @@ These are the imports we need.
     )
   import Prelude hiding (even, odd)
 \end{code}
-  
-Mutual recursion.
 
-\begin{code}
-  even :: Int -> Bool
-  even 0 = True
-  even n = odd (n - 1)
-
-  odd :: Int -> Bool
-  odd 0 = False
-  odd n = even (n - 1)
-\end{code}
-
-<https://www.haskellforall.com/2012/06/you-could-have-invented-free-monads.html>
-<https://www.tweag.io/blog/2018-02-05-free-monads/>
-<https://gist.github.com/eamelink/4466932a11d8d92a6b76e80364062250>
-
-The trampoline is the Free monad.
-
-\begin{code}
-  data Trampoline f r
-    = Trampoline {bounce :: f (Trampoline f r)}
-    | Done {result :: r}
-
-  instance Functor f => Functor (Trampoline f) where
-    fmap f (Trampoline m) = Trampoline (fmap (fmap f) m)
-    fmap f (Done r) = Done (f r)
-
-  instance Functor f => Applicative (Trampoline f) where
-    pure = Done
-    Done f <*> Done x = Done $ f x
-    Done f <*> Trampoline mx = Trampoline $ fmap f <$> mx
-    Trampoline mf <*> x = Trampoline $ fmap (<*> x) mf
-
-  instance Functor f => Monad (Trampoline f) where
-    return = Done
-    Done x >>= f = f x
-    Trampoline mx >>= f = Trampoline (fmap (>>= f) mx)
-
-  liftF :: Functor f => f r -> Trampoline f r
-  liftF m = Trampoline (fmap Done m)
-\end{code}
-
-The DSL for the even/odd problem.
-
-\begin{code}
-  data EvenOddF next
-    = Even Int (Bool -> next)
-    | Odd Int (Bool -> next)
-    deriving stock (Functor)
-
-  -- instance Functor EvenOddF where
-  --   fmap f (Even n k) = Even n (f . k)
-  --   fmap f (Odd n k) = Odd n (f . k)
-
-  type EvenOdd = Trampoline EvenOddF
-\end{code}
-
-Rewritten in terms of the DSL.
-
-\begin{code}
-  even' :: Int -> EvenOdd Bool
-  even' 0 = Done True
-  even' n = liftF (Odd (n - 1) id)
-
-  odd' :: Int -> EvenOdd Bool
-  odd' 0 = Done False
-  odd' n = liftF (Even (n - 1) id)
-
-  evenOddHandler :: EvenOddF (EvenOdd r) -> EvenOdd r
-  evenOddHandler (Even n k) = even' n >>= k
-  evenOddHandler (Odd n k) = odd' n >>= k
-\end{code}
-
-Reduce a trampoline to a value.
-
-\begin{code}
-  iterTrampoline ::
-    Functor f =>
-    (f (Trampoline f r) -> Trampoline f r) ->
-    Trampoline f r ->
-    r
-  iterTrampoline h = go
-    where
-      go Done {..} = result
-      go Trampoline {..} = go (h bounce)
-\end{code}
-
-Run the trampoline to completion with the even/odd handler.
-
-\begin{code}
-  runEvenOdd :: EvenOdd r -> r
-  runEvenOdd = iterTrampoline evenOddHandler
-\end{code}
-
-<https://stackoverflow.com/questions/57733363/how-to-adapt-trampolines-to-continuation-passing-style>
-
-Fibonacci numbers.
-
-\begin{code}
-  fib :: Int -> Int
-  fib n = go n 0 1
-    where go !n !a !b | n == 0    = a
-                      | otherwise = go (n - 1) b (a + b)
-
-  data FibF next =
-      FibF Int Int Int (Int -> next)
-    deriving stock Functor
-
-  type Fib = Trampoline FibF
-
-  fib' :: Int -> Fib Int
-  fib' n = liftF (FibF n 0 1 id)
-
-  fibHandler :: FibF (Fib r) -> Fib r
-  fibHandler (FibF 0 a _ k) = Done a >>= k
-  fibHandler (FibF n a b k) = liftF (FibF (n - 1) b (a + b) id) >>= k
-
-  runFib :: Fib Int -> Int
-  runFib = iterTrampoline fibHandler
-\end{code}
+Now, since this is settled, we can get on with the article.
 
 The best refactoring we have never heard of
 -------------------------------------------
 
-The first part of this literal Haskell essay is based on a
+The first part of this article is based on a
 [2019 post and talk](https://www.pathsensitive.com/2019/07/the-best-refactoring-youve-never-heard.html)
 by [James Koppel](https://www.jameskoppel.com)
 about the equivalence of recursion and iteration.
 
 James' talk is a great introduction to the topic,
-but it left out a few details and did not explain
+but it left out a few important details and did not explain
 how to generalize the example from the talk to more complicated cases.
-The original talk used Java and a little bit of Haskell,
-but I'm going to use Haskell exclusively here.
-This will make it clearer for people familiar with Haskell.
+Also, the original talk used Java and a little bit of Haskell,
+but I'm going to exclusively use Haskell here.
+This will make it clearer for people familiar with Haskell but not with Java,
+like me.
 
-Data type for a binary tree.
+James' example is a recursive function that prints the content of a binary tree.
+The problem is then to convert the recursive function to an iterative one.
+We will reproduce the conversion process in Haskell code,
+and the first step is going to be to define an abstract data type for binary trees:
 
 \begin{code}
   data Tree a
@@ -222,7 +121,9 @@ Data type for a binary tree.
     deriving stock (Eq, Show, Functor, Generic)
 \end{code}
 
-We will use the following integer example tree in the following.
+For illustration purposes,
+we will use the following balanced tree
+that carries consecutive integers at its seven leaves:
 
 \begin{code}
   exampleTree :: Tree Int
@@ -241,11 +142,11 @@ We will use the following integer example tree in the following.
       )
 \end{code}
 
-Any tree will do, but we will use this one.
-We can print the content of the tree using the `Show` instance of `a`.
+Really, any tree will do, but we will use this one.
+We can print the contents of our tree using the `Show` instance of integers.
 
 \begin{code}
-  -- | Print the content of a tree.
+  -- | Print the content of a `Tree`.
   -- >>> printTree exampleTree
   -- 1
   -- 2
@@ -262,14 +163,37 @@ We can print the content of the tree using the `Show` instance of `a`.
     printTree right
 \end{code}
 
-We have two recursive calls to `printTree` here.
+This is the function we want to convert to an iterative one.
+In its current form, it contains two recursive calls to itself.
 
 https://hexagoxel.de/postsforpublish/posts/2018-09-09-cont-part-one.html
 
 To eliminate the recursive calls, we need to perform a number of transformations.
+Each transformation is potentially headache inducing,
+and I am not going to promise pretty code.
+In fact, the code is getting worse and worse.
 
-First, we rewrite the `printTree` function to use continuations.
-In Haskell, this is usually done by using the `ContT` monad transformer.
+With your expectations properly lowered,
+let's start with the first transformation.
+We need to rewrite the `printTree` function to use continuations,
+using something called the "continuation passing style" or CPS.
+I'm not going to explain CPS in all its glory,
+only that it is a style of programming in which functions do
+not return values, but instead repeatedly pass control to
+a function called a continuation that decides what to do next.
+The mind-bending implications of this style of programming
+are introduced and discussed in
+[this article on wikibooks.org](https://en.wikibooks.org/wiki/Haskell/Continuation_passing_style).
+Please have a look at that article if you are interested in the details.
+
+Haskell is particularly good at handling the CPS style,
+rewriting to it is easy and mechanical.
+The tool we will use is called the `ContT` monad transformer.
+It is found in the [transformers](https://hackage.haskell.org/package/transformers) package.
+`ContT` will wrap the `IO` monad,
+and we will use the `>>=` operator to chain continuations.
+`IO` values need to be lifted to `ContT` values.
+This gives us:
 
 \begin{code}
   printTree' :: forall a r. Show a => Tree a -> ContT r IO ()
@@ -282,10 +206,12 @@ In Haskell, this is usually done by using the `ContT` monad transformer.
 
 The code appears mostly the same, except for a few subtleties.
 We have changed the return type and added a new type variable, `r`,
-which is the type of the result of the continuation.
-We can run the `ContT r m a` monad transformer
-using the `runContT :: ContT r m a -> (a -> m r) -> m r` function
-to get the result:
+that we cannot touch since it is quantified over.
+It is the type of the result of the continuation.
+`r` will only be of interest when we run the
+`ContT r m a` monad transformer.
+This is done using the `runContT :: ContT r m a -> (a -> m r) -> m r` function.
+It runs the CPS computation and gets the result:
 
 \begin{code}
   -- | Run the `ContT` computation for `printTree'`.
@@ -301,11 +227,16 @@ to get the result:
   runPrintTree' tree = runContT (printTree' tree) pure
 \end{code}
 
+`pure` decides that the result of the continuation is `IO ()`.
+Everything still works as expected.
+
 The `ContT` monad transformer is a great convenience
 and allows us to deal with continuations in the familiar monadic style.
-However, it also hides what is actually happening behind the scenes.
+What's great for Haskell and its users is not so great for us in this article.
+`ContT` is very effective at hiding what is actually happening behind the scenes.
+We need to pull that curtain up and see what is going on.
 Below is the same code as before, but with the `ContT` monad transformer
-inlined into the `printTree'` function.
+inlined into the `printTree'` function:
 
 \begin{code}
   printTree'' :: forall a r. Show a => Tree a -> (() -> IO r) -> IO r
@@ -319,13 +250,21 @@ inlined into the `printTree'` function.
      in outer
 \end{code}
 
-We can see now that the continuation, `c`, is a function
-that takes a value of type `()` and returns a value of type `IO r`.
+This is starting to look nasty.
+`printTree''` is now a higher-order function that takes a continuation
+function, `c`, as its second argument.
+Notwithstanding, we can also clearly see now that `c`
+takes a value of type `()` and returns a value of type `IO r`.
+The `()` type of the argument is a consequence of the fact that
+the original `printTree` function returned a value of type `IO ()`.
+
+Let's take a look at the `Node` case of `printTree''`.
 The `do` notation is desugared into nested continuations.
 `inner` chains the `second` and `third` functions,
 and `outer` chains the `first` and `inner` functions.
-We can convince ourselves that the `printTree''` function is computing the
-same result as the `printTree'` function.
+`first` happens first, then `second`, and then `third`.
+We can convince ourselves that this painfully obfuscated `printTree''` function
+is still computing the same result as the `printTree` function.
 
 \begin{code}
   -- | Run the CPS computation for `printTree''`.
@@ -341,13 +280,19 @@ same result as the `printTree'` function.
   runPrintTree'' tree = printTree'' tree (\() -> pure ())
 \end{code}
 
-At this point, we still have not eliminated any recursive calls.
+This is nice, but we still have not eliminated any recursive calls.
 In order to make progress, we need to convert the
 higher-order `printTree''` function to a first-order function.
 This process is called "defunctionalization".
-We defunctionalize the `printTree''` function by replacing all
-the continuation, `c :: () -> IO r`, with a value of the new data type
-`Kont (Next a)`, where
+There is a [Wikipedia article](https://en.wikipedia.org/wiki/Defunctionalization)
+on the subject if you are interested.
+It's one of those rare and surprising articles on Wikipedia
+that exclusively use Haskell to explain things.
+Not that there should be more of them.
+
+Concretely, we defunctionalize the `printTree''` function by replacing all
+the continuations, `c :: () -> IO r`, with a value of a new data type
+`Kont (Next a)`. `Kont` and `Next` look like this:
 
 \begin{code}
   data Kont a = Finished | More a (Kont a)
@@ -355,12 +300,16 @@ the continuation, `c :: () -> IO r`, with a value of the new data type
   data Next a = First (Tree a) | Second a | Third (Tree a)
 \end{code}
 
-`Next` describes the next step in the computation.
-Each constructor corresponds to a different action.
+`Kont` is a recursive data type with two constructors,
+`Finished` and `More`. We use `Finished` to terminate the computation,
+and `More` to indicate that we need to continue.
+When that happens, we use `Next` to describe
+the details of the next step in the computation.
+Each constructor of `Next` corresponds to a different action that needs to be taken.
 The `First` constructor is named after the `first` function in `printTree''`.
 It takes a left subtree as argument.
 The `Second` constructor is named after the `second` function in `printTree''`.
-It's argument is the content of the current node.
+It's argument is the content of the current node that needs to be printed.
 The `Third` constructor is named after the `third` function in `printTree''`,
 and it takes a right subtree as argument.
 We need a new function, `apply`, that interprets a `Kont (Next a)` value and
@@ -377,9 +326,10 @@ executes the corresponding action:
 We can see here how different `Next` values correspond to different actions.
 When the computation is finished, `apply` returns `()`.
 When there is more work to do,
-`apply` either calls the `printTree'''` function with the next subtree
-and the continuation value, `c`, or it calls the `print` function
-on the content of the node and then itself to continue the computation.
+`apply` either calls the yet-to-be-defined `printTree'''` function
+with the next subtree and the continuation value, `c`,
+or it calls the `print` function on the content of the node
+and then itself to continue the computation.
 The purpose of the `printTree'''` function is to build continuation values
 and then call `apply` to execute the corresponding actions:
 
@@ -397,7 +347,7 @@ and then call `apply` to execute the corresponding actions:
       )
 \end{code}
 
-How do we know that `apply` is working correctly?
+How do we know that all this is working correctly?
 We can run it:
 
 \begin{code}
@@ -416,10 +366,10 @@ We can run it:
 
 Great, we have successfully defunctionalized `printTree''`
 and turned it into a first-order function.
-We are not done yet, though.
+This has been a major step, but we are not done yet.
 We still have to eliminate the recursive calls.
 It only appears as if `printTree'''` doesn't call itself anymore.
-In fact, it still does which becomes more apparent
+In fact, it still does. This becomes more apparent
 when we inline `apply` into `printTree'''`:
 
 \begin{code}
@@ -444,10 +394,11 @@ when we inline `apply` into `printTree'''`:
 \end{code}
 
 At first glance, this doesn't look better than what we had before.
-We went from two recursive calls up to four.
+We went from two recursive calls up to now four.
 There is something interesting going on here, though.
 The recursive call to `printTree'''` always appears in the tail position.
 And this means that we should be able to replace the calls with a loop.
+Wikipedia also has [an article on that](https://en.wikipedia.org/wiki/Tail_call).
 However, we also notice that `printTree'''`
 is called with different arguments in all four cases.
 We can't replace these calls with a loop without
@@ -455,8 +406,9 @@ removing those arguments first, and we can't remove the arguments
 until we have a way to keep track of them.
 Or do we? Haskell has a special type, called `State`,
 that allows for just that.
-Rather than passing arguments, we update the `State` with their values.
-
+On hackage, `State` is available as [`Control.Monad.Trans.State.Lazy`](https://hackage.haskell.org/package/transformers-0.6.0.2/docs/Control-Monad-Trans-State-Lazy.html).
+Rather than passing arguments,
+we are going to update the `State` with the arguments' values.
 In preparation for this, let us have a closer look at `Kont`.
 You may have already noticed, but our `Kont` is isomorphic to `[]`:
 `Finished` is the empty list, and `More` is simply the list constructor.
@@ -467,7 +419,7 @@ and by giving `Kont` a better name: `Stack`.
   type Stack a = [a]
 \end{code}
 
-The only operations on `Stack` we will need are
+The only operations on `Stack` we will need in the following are
 adding and removing single elements from its end.
 These operations are commonly called `push` and `pop`.
 They can be implemented as follows:
@@ -490,8 +442,8 @@ They can be implemented as follows:
       (x : xs) -> put xs >> pure (Just x)
 \end{code}
 
-Notice here how we use `get` and `put` to update the `Stack` state.
-With these, `printTree''''` becomes:
+Notice here how we use `get`, `put`, and `modify` to update the `Stack` state.
+With `push` and `pop`, `printTree''''` becomes:
 
 \begin{code}
   printTree''''' ::
@@ -521,7 +473,7 @@ and we already have effects in `IO` that we need to lift into it.
 Rather than building a value of type `Stack (Next a)`
 that we pass to `printTree''''`,
 we use `push` and `pop` to update the `Stack` state.
-We need to confirm that this is doing the right thing:
+As always, we need to confirm that this is doing the right thing:
 
 \begin{code}
   -- | Run the defunctionalized CPS computation for `printTree'''''`.
@@ -595,7 +547,11 @@ Let us introduce a little helper, `while`:
 
 This function just runs the given monadic computation
 again and again until it returns `Break`.
-This is as close to a loop as we can get in Haskell.
+This is as close to a "while" loop as we can get in Haskell,
+we can't remove the recursion here.
+Let us pretend the hypothetical Haskell-without-recursion
+has `while` as a primitive.
+
 With this, we finally have:
 
 \begin{code}
@@ -629,9 +585,27 @@ With this, we finally have:
           pure Continue
 \end{code}
 
-```haskell
-runStateT printTree''''''' (exampleTree, []) :: IO ()
-```
+There are no recursive calls left.
+Well, almost, because we are still using the recursive `Tree` type.
+
+This marvel of a function still computes the same result,
+
+\begin{code}
+  -- | Run the unrolled `printTree'''''''` program.
+  -- >>> runPrintTree''''''' exampleTree
+  -- 1
+  -- 2
+  -- 3
+  -- 4
+  -- 5
+  -- 6
+  -- 7 
+  runPrintTree''''''' :: Show a => Tree a -> IO ()
+  runPrintTree''''''' tree = evalStateT printTree''''''' (tree, [])
+\end{code}
+
+Accumulations
+-------------
 
 \begin{code}
   accumTree :: forall a. Monoid a => Tree a -> a
@@ -689,6 +663,9 @@ execWriter $ accumTree' (Sum <$> exampleTree)
 ```haskell
 execWriter $ runStateT accumTree''''''' (Sum <$> exampleTree, [])
 ```
+
+Flattening of A Tree
+--------------------
 
 \begin{code}
   data Token
@@ -1020,4 +997,126 @@ evalStateT parse (linearize @[] exampleTree) == Just exampleTree
   -- Sum {getSum = 28}
   r :: Sum Int
   r = execWriter $ runStateT (accumTree'''''''' @Vector) (linearize $ Sum <$> exampleTree, [])
+\end{code}
+
+Mutual Recursion
+----------------
+
+\begin{code}
+  even :: Int -> Bool
+  even 0 = True
+  even n = odd (n - 1)
+
+  odd :: Int -> Bool
+  odd 0 = False
+  odd n = even (n - 1)
+\end{code}
+
+<https://www.haskellforall.com/2012/06/you-could-have-invented-free-monads.html>
+<https://www.tweag.io/blog/2018-02-05-free-monads/>
+<https://gist.github.com/eamelink/4466932a11d8d92a6b76e80364062250>
+
+The trampoline is the Free monad.
+
+\begin{code}
+  data Trampoline f r
+    = Trampoline {bounce :: f (Trampoline f r)}
+    | Done {result :: r}
+
+  instance Functor f => Functor (Trampoline f) where
+    fmap f (Trampoline m) = Trampoline (fmap (fmap f) m)
+    fmap f (Done r) = Done (f r)
+
+  instance Functor f => Applicative (Trampoline f) where
+    pure = Done
+    Done f <*> Done x = Done $ f x
+    Done f <*> Trampoline mx = Trampoline $ fmap f <$> mx
+    Trampoline mf <*> x = Trampoline $ fmap (<*> x) mf
+
+  instance Functor f => Monad (Trampoline f) where
+    return = Done
+    Done x >>= f = f x
+    Trampoline mx >>= f = Trampoline (fmap (>>= f) mx)
+
+  liftF :: Functor f => f r -> Trampoline f r
+  liftF m = Trampoline (fmap Done m)
+\end{code}
+
+The DSL for the even/odd problem.
+
+\begin{code}
+  data EvenOddF next
+    = Even Int (Bool -> next)
+    | Odd Int (Bool -> next)
+    deriving stock (Functor)
+
+  -- instance Functor EvenOddF where
+  --   fmap f (Even n k) = Even n (f . k)
+  --   fmap f (Odd n k) = Odd n (f . k)
+
+  type EvenOdd = Trampoline EvenOddF
+\end{code}
+
+Rewritten in terms of the DSL.
+
+\begin{code}
+  even' :: Int -> EvenOdd Bool
+  even' 0 = Done True
+  even' n = liftF (Odd (n - 1) id)
+
+  odd' :: Int -> EvenOdd Bool
+  odd' 0 = Done False
+  odd' n = liftF (Even (n - 1) id)
+
+  evenOddHandler :: EvenOddF (EvenOdd r) -> EvenOdd r
+  evenOddHandler (Even n k) = even' n >>= k
+  evenOddHandler (Odd n k) = odd' n >>= k
+\end{code}
+
+Reduce a trampoline to a value.
+
+\begin{code}
+  iterTrampoline ::
+    Functor f =>
+    (f (Trampoline f r) -> Trampoline f r) ->
+    Trampoline f r ->
+    r
+  iterTrampoline h = go
+    where
+      go Done {..} = result
+      go Trampoline {..} = go (h bounce)
+\end{code}
+
+Run the trampoline to completion with the even/odd handler.
+
+\begin{code}
+  runEvenOdd :: EvenOdd r -> r
+  runEvenOdd = iterTrampoline evenOddHandler
+\end{code}
+
+<https://stackoverflow.com/questions/57733363/how-to-adapt-trampolines-to-continuation-passing-style>
+
+Fibonacci numbers.
+
+\begin{code}
+  fib :: Int -> Int
+  fib n = go n 0 1
+    where go !n !a !b | n == 0    = a
+                      | otherwise = go (n - 1) b (a + b)
+
+  data FibF next =
+      FibF Int Int Int (Int -> next)
+    deriving stock Functor
+
+  type Fib = Trampoline FibF
+
+  fib' :: Int -> Fib Int
+  fib' n = liftF (FibF n 0 1 id)
+
+  fibHandler :: FibF (Fib r) -> Fib r
+  fibHandler (FibF 0 a _ k) = Done a >>= k
+  fibHandler (FibF n a b k) = liftF (FibF (n - 1) b (a + b) id) >>= k
+
+  runFib :: Fib Int -> Int
+  runFib = iterTrampoline fibHandler
 \end{code}
