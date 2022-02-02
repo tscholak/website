@@ -39,14 +39,13 @@ Nothing extraordinarily fancy, just the usually fancy Haskell flavour.
   {-# LANGUAGE GeneralizedNewtypeDeriving #-}
   {-# LANGUAGE StandaloneDeriving #-}
   {-# LANGUAGE LambdaCase #-}
-  {-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 \end{code}
 
 A bunch of these are part of
 [GHC2021](https://ghc.gitlab.haskell.org/ghc/doc/users_guide/exts/control.html#extension-GHC2021),
 but this blog is boring and still running on GHC 8.10.
 
-Unsurprisingly, we will also work with code that is not in the standard library:
+Unsurprisingly, we will also work with code that is not in the `Prelude`:
 
 \begin{code}
   module Unrecurse where
@@ -64,13 +63,14 @@ Unsurprisingly, we will also work with code that is not in the standard library:
       _2,
     )
   import Control.Monad (MonadPlus, mfilter)
-  import Control.Monad.Cont (ContT (runContT), MonadTrans (lift))
+  import Control.Monad.Cont (ContT (runContT))
   import Control.Monad.State
     ( MonadState (get, put),
       StateT (runStateT),
       evalStateT,
       modify,
     )
+  import Control.Monad.Trans (MonadTrans (lift))
   import Control.Monad.Writer (Writer, execWriter, tell)
   import Data.Coerce (coerce)
   import Data.Functor.Foldable (Base, Corecursive (embed), Recursive (cata))
@@ -93,8 +93,8 @@ Unsurprisingly, we will also work with code that is not in the standard library:
 
 Now, since this is settled, we can get on with the article.
 
-The best refactoring we have never heard of
--------------------------------------------
+The Best Refactoring You Have Never Done
+----------------------------------------
 
 The first part of this article is based on a
 [2019 post and talk](https://www.pathsensitive.com/2019/07/the-best-refactoring-youve-never-heard.html)
@@ -104,20 +104,26 @@ about the equivalence of recursion and iteration.
 James' talk is a great introduction to the topic,
 but it left out a few important details and did not explain
 how to generalize the example from the talk to more complicated cases.
-Also, the original talk used Java and a little bit of Haskell,
+Also, the original talk used Java and only a little bit of Haskell,
 but I'm going to exclusively use Haskell here.
 This will make it clearer for people familiar with Haskell but not with Java,
 like me.
 
 James' example is a recursive function that prints the content of a binary tree.
-The problem is then to convert the recursive function to an iterative one.
+The problem he chose to focus on is
+to convert that recursive function to an iterative one.
 We will reproduce the conversion process in Haskell code,
-and the first step is going to be to define an abstract data type for binary trees:
+and the first step is going to be to define
+an abstract data type for binary trees:
 
 \begin{code}
   data Tree a
     = Nil
-    | Node {left :: Tree a, content :: a, right :: Tree a}
+    | Node
+        { left :: Tree a,
+          content :: a,
+          right :: Tree a
+        }
     deriving stock (Eq, Show, Functor, Generic)
 \end{code}
 
@@ -146,7 +152,7 @@ Really, any tree will do, but we will use this one.
 We can print the contents of our tree using the `Show` instance of integers.
 
 \begin{code}
-  -- | Print the content of a `Tree`.
+  -- | Print the content of a `Tree a`.
   -- >>> printTree exampleTree
   -- 1
   -- 2
@@ -165,13 +171,11 @@ We can print the contents of our tree using the `Show` instance of integers.
 
 This is the function we want to convert to an iterative one.
 In its current form, it contains two recursive calls to itself.
-
-https://hexagoxel.de/postsforpublish/posts/2018-09-09-cont-part-one.html
-
-To eliminate the recursive calls, we need to perform a number of transformations.
+To eliminate the recursive calls,
+we need to perform a number of transformations.
 Each transformation is potentially headache inducing,
 and I am not going to promise pretty code.
-In fact, the code is getting worse and worse.
+In fact, the code is going to get worse and worse.
 
 With your expectations properly lowered,
 let's start with the first transformation.
@@ -184,7 +188,9 @@ a function called a continuation that decides what to do next.
 The mind-bending implications of this style of programming
 are introduced and discussed in
 [this article on wikibooks.org](https://en.wikibooks.org/wiki/Haskell/Continuation_passing_style).
-Please have a look at that article if you are interested in the details.
+Have a look at that article if you are interested in the fine details.
+It's not necessary to understand the details of CPS to
+understand the rest of this article, though.
 
 Haskell is particularly good at handling the CPS style,
 rewriting to it is easy and mechanical.
@@ -196,7 +202,11 @@ and we will use the `>>=` operator to chain continuations.
 This gives us:
 
 \begin{code}
-  printTree' :: forall a r. Show a => Tree a -> ContT r IO ()
+  printTree' ::
+    forall a r.
+    Show a =>
+    Tree a ->
+    ContT r IO ()
   printTree' Nil = pure ()
   printTree' Node {..} = do
     printTree' left
@@ -208,10 +218,10 @@ The code appears mostly the same, except for a few subtleties.
 We have changed the return type and added a new type variable, `r`,
 that we cannot touch since it is quantified over.
 It is the type of the result of the continuation.
-`r` will only be of interest when we run the
-`ContT r m a` monad transformer.
+`r` will only be of interest when we run the `ConT` monad transformer.
 This is done using the `runContT :: ContT r m a -> (a -> m r) -> m r` function.
-It runs the CPS computation and gets the result:
+It runs the CPS computation encoded in `ContT r m a`
+and gets the result, if we seed it with one final continuation:
 
 \begin{code}
   -- | Run the `ContT` computation for `printTree'`.
@@ -224,22 +234,30 @@ It runs the CPS computation and gets the result:
   -- 6
   -- 7
   runPrintTree' :: Show a => Tree a -> IO ()
-  runPrintTree' tree = runContT (printTree' tree) pure
+  runPrintTree' tree =
+    runContT (printTree' tree) pure
 \end{code}
 
-`pure` decides that the result of the continuation is `IO ()`.
-Everything still works as expected.
+`pure` decides that the result of the continuation is `r ~ ()`.
+Everything still works as expected, phew.
 
 The `ContT` monad transformer is a great convenience
 and allows us to deal with continuations in the familiar monadic style.
-What's great for Haskell and its users is not so great for us in this article.
+What's great for Haskell and its users is not so great
+for us in this article, though.
+Remember, we want less of that good, idiomatic Haskell, not more of it.
 `ContT` is very effective at hiding what is actually happening behind the scenes.
 We need to pull that curtain up and see what is going on.
 Below is the same code as before, but with the `ContT` monad transformer
 inlined into the `printTree'` function:
 
 \begin{code}
-  printTree'' :: forall a r. Show a => Tree a -> (() -> IO r) -> IO r
+  printTree'' ::
+    forall a r.
+    Show a =>
+    Tree a ->
+    (() -> IO r) ->
+    IO r
   printTree'' Nil = \c -> c ()
   printTree'' Node {..} =
     let first = \c -> printTree'' left c
@@ -251,6 +269,7 @@ inlined into the `printTree'` function:
 \end{code}
 
 This is starting to look nasty.
+Don't look at me, I warned you.
 `printTree''` is now a higher-order function that takes a continuation
 function, `c`, as its second argument.
 Notwithstanding, we can also clearly see now that `c`
@@ -277,27 +296,34 @@ is still computing the same result as the `printTree` function.
   -- 6
   -- 7
   runPrintTree'' :: Show a => Tree a -> IO ()
-  runPrintTree'' tree = printTree'' tree (\() -> pure ())
+  runPrintTree'' tree =
+    printTree'' tree (\() -> pure ())
 \end{code}
 
-This is nice, but we still have not eliminated any recursive calls.
+This sure is nice,
+but we still have not eliminated any recursive calls.
 In order to make progress, we need to convert the
 higher-order `printTree''` function to a first-order function.
 This process is called "defunctionalization".
-There is a [Wikipedia article](https://en.wikipedia.org/wiki/Defunctionalization)
+Once again, there is a [wiki article](https://en.wikipedia.org/wiki/Defunctionalization)
 on the subject if you are interested.
-It's one of those rare and surprising articles on Wikipedia
+It's one of those rare and wonderous articles on Wikipedia
 that exclusively use Haskell to explain things.
-Not that there should be more of them.
+Not that there should be more of them, but I digress.
 
 Concretely, we defunctionalize the `printTree''` function by replacing all
 the continuations, `c :: () -> IO r`, with a value of a new data type
 `Kont (Next a)`. `Kont` and `Next` look like this:
 
 \begin{code}
-  data Kont a = Finished | More a (Kont a)
+  data Kont next
+    = Finished
+    | More next (Kont next)
 
-  data Next a = First (Tree a) | Second a | Third (Tree a)
+  data Next a
+    = First (Tree a)
+    | Second a
+    | Third (Tree a)
 \end{code}
 
 `Kont` is a recursive data type with two constructors,
@@ -309,32 +335,45 @@ Each constructor of `Next` corresponds to a different action that needs to be ta
 The `First` constructor is named after the `first` function in `printTree''`.
 It takes a left subtree as argument.
 The `Second` constructor is named after the `second` function in `printTree''`.
-It's argument is the content of the current node that needs to be printed.
+Its argument is the content of the current node that needs to be printed.
 The `Third` constructor is named after the `third` function in `printTree''`,
 and it takes a right subtree as argument.
 We need a new function, `apply`, that interprets a `Kont (Next a)` value and
 executes the corresponding action:
 
 \begin{code}
-  apply :: forall a. Show a => Kont (Next a) -> IO ()
-  apply (More (First left) c) = printTree''' left c
-  apply (More (Second content) c) = print content >> apply c
-  apply (More (Third right) c) = printTree''' right c
-  apply Finished = pure ()
+  apply ::
+    forall a.
+    Show a =>
+    Kont (Next a) ->
+    IO ()
+  apply (More (First left) c) =
+    printTree''' left c
+  apply (More (Second content) c) =
+    print content >> apply c
+  apply (More (Third right) c) =
+    printTree''' right c
+  apply Finished =
+    pure ()
 \end{code}
 
 We can see here how different `Next` values correspond to different actions.
 When the computation is finished, `apply` returns `()`.
 When there is more work to do,
 `apply` either calls the yet-to-be-defined `printTree'''` function
-with the next subtree and the continuation value, `c`,
+with the next subtree and the continuation value, `c :: Kont (Next a)`,
 or it calls the `print` function on the content of the node
 and then itself to continue the computation.
 The purpose of the `printTree'''` function is to build continuation values
 and then call `apply` to execute the corresponding actions:
 
 \begin{code}
-  printTree''' :: forall a. Show a => Tree a -> Kont (Next a) -> IO ()
+  printTree''' ::
+    forall a.
+    Show a =>
+    Tree a ->
+    Kont (Next a) ->
+    IO ()
   printTree''' Nil c = apply c
   printTree''' Node {..} c =
     apply
@@ -347,11 +386,12 @@ and then call `apply` to execute the corresponding actions:
       )
 \end{code}
 
-How do we know that all this is working correctly?
+How do we know that all this is all working correctly?
 We can run it:
 
 \begin{code}
-  -- | Run the defunctionalized CPS computation for `printTree'''`.
+  -- | Run the defunctionalized CPS computation
+  -- for `printTree'''`.
   -- >>> runPrintTree''' exampleTree
   -- 1
   -- 2
@@ -361,7 +401,8 @@ We can run it:
   -- 6
   -- 7
   runPrintTree''' :: Show a => Tree a -> IO ()
-  runPrintTree''' tree = printTree''' tree Finished
+  runPrintTree''' tree =
+    printTree''' tree Finished
 \end{code}
 
 Great, we have successfully defunctionalized `printTree''`
@@ -369,11 +410,17 @@ and turned it into a first-order function.
 This has been a major step, but we are not done yet.
 We still have to eliminate the recursive calls.
 It only appears as if `printTree'''` doesn't call itself anymore.
-In fact, it still does. This becomes more apparent
-when we inline `apply` into `printTree'''`:
+In fact, it still does, just indirectly through mutual recursion.
+This becomes more apparent
+once we inline `apply` into `printTree'''`:
 
 \begin{code}
-  printTree'''' :: forall a. Show a => Tree a -> Kont (Next a) -> IO ()
+  printTree'''' ::
+    forall a.
+    Show a =>
+    Tree a ->
+    Kont (Next a) ->
+    IO ()
   printTree'''' Nil (More (First left) c) =
     printTree'''' left c
   printTree'''' Nil (More (Second content) c) =
@@ -406,7 +453,8 @@ removing those arguments first, and we can't remove the arguments
 until we have a way to keep track of them.
 Or do we? Haskell has a special type, called `State`,
 that allows for just that.
-On hackage, `State` is available as [`Control.Monad.Trans.State.Lazy`](https://hackage.haskell.org/package/transformers-0.6.0.2/docs/Control-Monad-Trans-State-Lazy.html).
+On hackage, `State` is available as
+[`Control.Monad.Trans.State.Lazy`](https://hackage.haskell.org/package/transformers-0.6.0.2/docs/Control-Monad-Trans-State-Lazy.html).
 Rather than passing arguments,
 we are going to update the `State` with the arguments' values.
 In preparation for this, let us have a closer look at `Kont`.
@@ -454,9 +502,13 @@ With `push` and `pop`, `printTree''''` becomes:
   printTree''''' Nil = do
     next <- pop
     case next of
-      Just (First left) -> printTree''''' left
-      Just (Second content) -> lift (print content) >> printTree''''' Nil
-      Just (Third right) -> printTree''''' right
+      Just (First left) ->
+        printTree''''' left
+      Just (Second content) ->
+        lift (print content)
+          >> printTree''''' Nil
+      Just (Third right) ->
+        printTree''''' right
       Nothing -> pure ()
   printTree''''' Node {..} = do
     push (Third right)
@@ -476,7 +528,8 @@ we use `push` and `pop` to update the `Stack` state.
 As always, we need to confirm that this is doing the right thing:
 
 \begin{code}
-  -- | Run the defunctionalized CPS computation for `printTree'''''`.
+  -- | Run the defunctionalized CPS computation
+  -- for `printTree'''''`.
   -- >>> runPrintTree''''' exampleTree
   -- 1
   -- 2
@@ -486,11 +539,12 @@ As always, we need to confirm that this is doing the right thing:
   -- 6
   -- 7
   runPrintTree''''' :: Show a => Tree a -> IO ()
-  runPrintTree''''' tree = evalStateT (printTree''''' tree) []
+  runPrintTree''''' tree =
+    evalStateT (printTree''''' tree) []
 \end{code}
 
 The result is as expected.
-This takes care of the `Stack` argument,
+This takes care of the `Kont (Next a)` argument,
 but we still need to eliminate the `Tree a` argument.
 We can use the same trick again and add `Tree a` to the state:
 
@@ -545,11 +599,11 @@ Let us introduce a little helper, `while`:
     Break -> pure ()
 \end{code}
 
-This function just runs the given monadic computation
+This function just runs the given monadic computation, `m :: m Continue`,
 again and again until it returns `Break`.
 This is as close to a "while" loop as we can get in Haskell,
 we can't remove the recursion here.
-Let us pretend the hypothetical Haskell-without-recursion
+Let us pretend the hypothetical recursion-free Haskell
 has `while` as a primitive.
 
 With this, we finally have:
@@ -601,8 +655,11 @@ This marvel of a function still computes the same result,
   -- 6
   -- 7 
   runPrintTree''''''' :: Show a => Tree a -> IO ()
-  runPrintTree''''''' tree = evalStateT printTree''''''' (tree, [])
+  runPrintTree''''''' tree =
+    evalStateT printTree''''''' (tree, [])
 \end{code}
+
+Fantastic!
 
 Accumulations
 -------------
@@ -619,10 +676,10 @@ Accumulations
 \begin{code}
   accumTree' :: forall a. Monoid a => Tree a -> Writer a ()
   accumTree' Nil = pure ()
-  accumTree' Node {..} = do
+  accumTree' Node {..} =
     accumTree' left
-    tell content
-    accumTree' right
+      *> tell content
+      *> accumTree' right
 \end{code}
 
 ```haskell
