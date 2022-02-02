@@ -12,6 +12,7 @@ teaser: >
   a recursive function that doesn't recurse.
 tags:
   items: [haskell]
+image: goodbye.gif
 ---
 
 Preliminaries
