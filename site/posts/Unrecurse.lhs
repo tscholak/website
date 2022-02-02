@@ -4,7 +4,8 @@ date: Jan 20, 2022
 teaser: >
   Have you ever wanted to write a recursive function and wondered
   what would happen if someone took away recursion from Haskell?
-  No recursive function calls, no recursive data types. How sad Haskell would be!
+  Say goodbye to recursive function calls, say goodbye to recursive data types.
+  How sad Haskell would be without them!
   I'm sure that thought must have occured to you.
   (If not, what are you even doing here?)
   Well, this article has you covered should that day ever come.
@@ -221,10 +222,11 @@ The code appears mostly the same, except for a few subtleties.
 We have changed the return type and added a new type variable, `r`,
 that we cannot touch since it is quantified over.
 It is the type of the result of the continuation.
-`r` will only be of interest when we run the `ConT` monad transformer.
+`r` will only be of interest when we run the `ContT` monad transformer.
 This is done using the `runContT :: ContT r m a -> (a -> m r) -> m r` function.
 It runs the CPS computation encoded in `ContT r m a`
-and gets the result, if we seed it with one final continuation:
+and gets the result, but only if we seed it with one final continuation
+of the form `a -> m r`:
 
 \begin{code}
   -- | Run the `ContT` computation for `printTree'`.
@@ -241,7 +243,8 @@ and gets the result, if we seed it with one final continuation:
     runContT (printTree' tree) pure
 \end{code}
 
-`pure` decides that the result of the continuation is `r ~ ()`.
+The final continuation is `pure`,
+and it decides that the result of the continuation is `r ~ ()`.
 Everything still works as expected, phew.
 
 The `ContT` monad transformer is a great convenience
@@ -249,6 +252,7 @@ and allows us to deal with continuations in the familiar monadic style.
 What's great for Haskell and its users is not so great
 for us in this article, though.
 Remember, we want less of that good, idiomatic Haskell, not more of it.
+The goodbye to recursion must hurt.
 `ContT` is very effective at hiding what is actually happening behind the scenes.
 We need to pull that curtain up and see what is going on.
 Below is the same code as before, but with the `ContT` monad transformer
