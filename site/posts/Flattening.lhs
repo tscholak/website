@@ -82,16 +82,21 @@ We used these techniques to reimplement two simple recursive functions,
 These functions are both examples of a fold that deconstructs a binary tree,
 `Tree a`, bit by bit to produce an effect or a value, respectively.
 The `Tree` type is a recursive data type, and we did not dare to try to remove recursion from it.
-This time, we are more ambitious.
+This time, we are more ambitious. By the end of this article,
+we will not only know how to remove recursive calls from a function,
+we will also know how to remove recursion from a data type.
 
-We will need a few ingredients:
+We need a few ingredients:
 
-* `Token`s, which are going to represent the different parts of a `Tree`.
-* A `Tape`, which is a linear data structure that can be written to and read from and that can be used to represent a `Tree`.
-* A linearizer that can convert a `Tree` to a `Tape` of tokens.
-* A parser that can convert a tape of tokens to a `Tree`.
+* `Token`s, which are a set of values that are going to represent different pieces of a `Tree`.
+* A `Tape`, which is a linear data structure that can be written to and read from and that can be used to represent a whole `Tree`.
+* A linearizer that can convert a `Tree` to a `Tape` of `Token`s.
+* A parser that can convert a `Tape` of `Token`s to a `Tree`.
 * A pattern functor for the `Tree` type, which can be used to construct or deconstruct a tree iteratively.
-* Lots and lots of boilerplate and Haskell `Generic` code.
+* Lots and lots of boilerplate with Haskell `Generic` code.
+
+The high-level idea of all of this is that we are going to store our tree
+in a linear data structure, a tape, in a fashion that allows us to [tbd]
 
 \begin{code}
   data Token
