@@ -780,5 +780,5 @@ This settles the issue.
 Now you know how to write a recursive function that doesn't recurse.
 
 Next time, we will take a closer look at the `Tree` type,
-and make sure it doesn't recurse either.
-I can't wait for that.
+and we will make sure it doesn't recurse either.
+This will be super ugly, I can't wait for that.
