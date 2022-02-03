@@ -47,18 +47,9 @@ Unsurprisingly, we will also work with code that is not in the `Prelude`:
 \begin{code}
   module Unrecurse where
 
-  import Control.Lens
-    ( zoom,
-      _1,
-      _2,
-    )
+  import Control.Lens (zoom, _1, _2)
   import Control.Monad.Cont (ContT (runContT))
-  import Control.Monad.State
-    ( MonadState (get, put),
-      StateT (runStateT),
-      evalStateT,
-      modify,
-    )
+  import Control.Monad.State (MonadState (get, put), StateT (runStateT), evalStateT, modify)
   import Control.Monad.Trans (MonadTrans (lift))
   import Control.Monad.Writer (Writer, execWriter, tell)
   import Data.Monoid (Sum (..))
@@ -422,10 +413,10 @@ once we inline `apply` into `printTree'''`:
 At first glance, this doesn't look better than what we had before.
 We went from two recursive calls up to now four.
 There is something interesting going on here, though.
-The recursive call to `printTree'''` always appears in the tail position.
+The recursive call to `printTree''''` always appears in the tail position.
 And this means that we should be able to replace the calls with a loop.
 Wikipedia also has [an article on that](https://en.wikipedia.org/wiki/Tail_call).
-However, we also notice that `printTree'''`
+However, we also notice that `printTree''''`
 is called with different arguments in all four cases.
 We can't replace these calls with a loop without
 removing those arguments first, and we can't remove the arguments
@@ -502,7 +493,7 @@ This is because `StateT` is a monad transformer,
 and we already have effects in `IO` that we need to lift into it.
 
 Rather than building a value of type `Stack (Next a)`
-that we pass to `printTree''''`,
+that we pass to `printTree''''`, in `printTree'''''`,
 we use `push` and `pop` to update the `Stack` state.
 As always, we need to confirm that this is doing the right thing:
 
