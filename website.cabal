@@ -23,6 +23,7 @@ executable website
   other-modules:
       Contact
       Unrecurse
+      Flattening
   hs-source-dirs:
       app
     , site
