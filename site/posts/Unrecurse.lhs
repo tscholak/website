@@ -143,6 +143,9 @@ Each transformation is potentially headache inducing,
 and I am not going to promise pretty code.
 In fact, the code is going to get worse and worse.
 
+Continuations And Continuation Passing Style
+--------------------------------------------
+
 With your expectations properly lowered,
 let's start with the first transformation.
 We need to rewrite the `printTree` function to use continuations,
@@ -270,7 +273,10 @@ is still computing the same result as the `printTree` function.
     printTree'' tree (\() -> pure ())
 \end{code}
 
-This sure is nice,
+Defunctionalization
+-------------------
+
+What we have achieved so far is nice,
 but we still have not eliminated any recursive calls.
 In order to make progress, we need to convert the
 higher-order `printTree''` function to a first-order function.
@@ -410,7 +416,10 @@ once we inline `apply` into `printTree'''`:
       )
 \end{code}
 
-At first glance, this doesn't look better than what we had before.
+State And Stack
+---------------
+
+At first glance, `printTree''''` doesn't look better than what we had before.
 We went from two recursive calls up to now four.
 There is something interesting going on here, though.
 The recursive call to `printTree''''` always appears in the tail position.
@@ -554,6 +563,9 @@ and does not have any arguments.
 We are now ready for the final magic step,
 which is to eliminate all recursive calls.
 
+While
+-----
+
 Let us introduce a little helper, `while`:
 
 \begin{code}
@@ -630,7 +642,10 @@ This marvel of a function still computes the same result,
     evalStateT printTree''''''' (tree, [])
 \end{code}
 
-Fantastic! What's next? Accumulations.
+Fantastic! What's next?
+
+Accumulations
+-------------
 
 The `printTree` example from James' 2019 talk is a bit too simple,
 because we run `printTree` only for its effects.
@@ -769,6 +784,9 @@ that executes the `Writer` and `State` effects:
 
 This settles the issue.
 Now you know how to write a recursive function that doesn't recurse.
+
+Next Up
+-------
 
 Next time, we will take a closer look at the `Tree` type,
 and we will make sure it doesn't recurse either.
