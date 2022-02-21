@@ -2,7 +2,6 @@
 title: "Flattening -- How to Get from A Tree to A Flat Shape And Back Again"
 date: Feb 2, 2022
 teaser: >
-  The flattening has begun.
 tags:
   items: [haskell, recursion]
 ---
@@ -27,6 +26,7 @@ tags:
   {-# LANGUAGE GeneralizedNewtypeDeriving #-}
   {-# LANGUAGE StandaloneDeriving #-}
   {-# LANGUAGE LambdaCase #-}
+  {-# LANGUAGE InstanceSigs #-}
 \end{code}
 
 \begin{code}
@@ -53,7 +53,7 @@ tags:
   import Control.Monad.Trans (MonadTrans (lift))
   import Control.Monad.Writer (Writer, execWriter, tell)
   import Data.Coerce (coerce)
-  import Data.Functor.Foldable (Base, Corecursive (embed), Recursive (cata))
+  import Data.Functor.Foldable (Base, Corecursive (embed), Recursive (cata, project))
   import Data.Functor.Foldable.TH (makeBaseFunctor)
   import Data.Kind (Type)
   import Data.Maybe (fromJust)
@@ -68,63 +68,462 @@ tags:
       type (:*:) ((:*:)),
       type (:+:) (L1, R1),
     )
-  import Unrecurse (Continue (Break, Continue), Stack, Tree, exampleTree, pop, push, while)
+  import Unrecurse (Continue (..), Kont (..), Stack, Tree, exampleTree, pop, push, while)
   import Prelude hiding (even, odd)
 \end{code}
 
 The Flattening of A Tree
 ------------------------
 
-Previously, we have seen how one can remove recursive calls from a function.
+[Previously](/posts/Unrecurse.html),
+we have seen how one can remove recursive calls from a function.
 We learned about continuations, defunctionalization, and monadic `State` effects.
 We used these techniques to reimplement two simple recursive functions,
 `printTree` and `accumTree`, using only iteration.
-These functions are both examples of a fold that deconstructs a binary tree,
-`Tree a`, bit by bit to produce an effect or a value, respectively.
-The `Tree` type is a recursive data type, and we did not dare to try to remove recursion from it.
+These functions are both specific examples of a `fold`.
+They reduce the `Tree` data structure bit by bit to an effect or to a value, respectively.
+
+Even though we worked hard,
+our attempts to remove all recursion from our program were incomplete:
+the `Tree` type was and remains recursively defined.
+Its `Node` constructor takes two `Tree` values as arguments
+which makes `Tree` a recursive data type.
+Last time, we did not dare to remove this kind of recursion.
 This time, we are more ambitious. By the end of this article,
 we will not only know how to remove recursive calls from a function,
 we will also know how to remove recursion from a data type.
 
-We need a few ingredients:
+The high-level idea of this article is that
+we are going to store our `Tree` in a linear data structure,
+and we will call this data structure a `Tape`.
+Storing will be done in a fashion that
+allows us to zoom in on subtrees by slicing the `Tape`.
+
+As usual, we need a few ingredients:
 
 * `Token`s, which are a set of values that are going to represent different pieces of a `Tree`.
-* A `Tape`, which is a linear data structure that can be written to and read from and that can be used to represent a whole `Tree`.
+* The `Tape`, which is a linear data structure that can be written to and read from and that can be used to represent a whole `Tree` or parts of it.
 * A linearizer that can convert a `Tree` to a `Tape` of `Token`s.
 * A parser that can convert a `Tape` of `Token`s to a `Tree`.
 * A pattern functor for the `Tree` type, which can be used to construct or deconstruct a tree iteratively.
-* Lots and lots of boilerplate with Haskell `Generic` code.
+* Lots and lots of boilerplaty Haskell `Generic` code.
 
-The high-level idea of all of this is that we are going to store our tree
-in a linear data structure, a tape, in a fashion that allows us to [tbd]
+We shall start by defining the `Token` and `Tape` types.
 
-\begin{code}
-  data Token
-    = Rec Int
-    | L
-    | R
-    | I Int
-    deriving stock (Eq, Show)
-\end{code}
+Token Tapes
+-----------
+
+We are going to define the tape as a `newtype` wrapper
+around an underlying type constructor, `t :: Type -> Type`:
 
 \begin{code}
   newtype Tape t a = Tape {unTape :: t a}
     deriving stock (Eq, Show)
-    deriving newtype (Functor, Applicative, Monad, Alternative, Foldable)
+    deriving newtype
+      ( Semigroup,
+        Monoid,
+        Functor,
+        Applicative,
+        Monad,
+        Alternative,
+        Foldable
+      )
+\end{code}
 
+`t` could be `[]`, `Seq`, `Vector`, `Deque`, etc.
+We won't make a choice at this point.
+The only requirement is that there is a way to attach or detach elements
+on the left side of `t` and thus the `Tape`:
+
+\begin{code}
   instance Cons (t a) (t b) a b => Cons (Tape t a) (Tape t b) a b where
     _Cons = withPrism cons' $ \review' preview' ->
       prism (coerce review') (coerce preview')
       where
         cons' :: Prism (t a) (t b) (a, t a) (b, t b)
         cons' = _Cons
+\end{code}
 
+This class instance gives us a
+[prism](https://hackage.haskell.org/package/lens-5.1/docs/Control-Lens-Prism.html#t:Prism)
+that can be used to build or deconstruct a `Tape`
+via the `cons` and `uncons` functions from
+[Control.Lens.Cons](https://hackage.haskell.org/package/lens-5.1/docs/Control-Lens-Cons.html).
+
+Let's talk about what we are going to put on the tape.
+Elements will always be `Token`s.
+Each token will be used to represent a piece of information about a particular `Tree`.
+It is a good idea to save us some keystrokes and use a type synonym:
+
+\begin{code}
+  -- | A tape of tokens.
   type TTape t = Tape t Token
 \end{code}
 
+For trees with integer leaf nodes, `Tree Int`,
+we will only need four `Token`s:
+
+\begin{code}
+  data Token
+    = -- | Represent a recursive call to an abstract data type.
+      Rec Int
+    | -- | Represent a left choice between two constructors.
+      L
+    | -- | Represent a right choice between two constructors.
+      R
+    | -- | Represent an integer leaf node.
+      I Int
+    deriving stock (Eq, Show)
+\end{code}
+
+I will explain each of these tokens in more detail later.
+
+Linearization
+-------------
+
+How do we turn a `Tree` into a `Tape`?
+
+We want a function, let's call it `linearize`,
+that returns a lossless encoding
+of values of some type `a` into a `TTape t`.
+`a` could be any type,
+but we want this to work for `a ~ Tree Int` in the end.
+
+`linearize` will have the type:
+
 \begin{code}
   type To t a = a -> TTape t
+\end{code}
 
+We can formalize this by defining a type class:
+
+\begin{code}
+  class ToTokens (t :: Type -> Type) (a :: Type) where
+    linearize :: To t a
+    default linearize :: (Recursive a, ToTokensStep t (Base a)) => To t a
+    linearize = cata linearizeStep
+\end{code}
+
+This class is parameterized by the tape's type parameter `t`
+and the type of the values we are going to encode, `a`.
+
+`linearize` has a `default` implementation that uses
+the accurately named yet mysterious `Recursive` class.
+`Recursive` gives us `cata` which we use to recursively encode values of type `a` into `TTape t`.
+Both, `Recursive` and `cata`, are defined in
+[Data.Functor.Foldable](https://hackage.haskell.org/package/recursion-schemes-5.2.2.2/docs/Data-Functor-Foldable.html).
+`cata` is a generalization of `fold` and takes two arguments:
+
+* A function, here `linearizeStep :: Base a (TTape t) -> TTape t`, that performs one step of a recursive computation.
+* The value that needs to be worked on, here of type `a`.
+
+With these, `cata` returns a value of type `TTape t`.
+
+Base Functors
+-------------
+
+Let's zoom in on the cryptic type of `linearizeStep`.
+It is a function that takes a value of type `Base a (TTape t)`
+and returns a value of type `TTape t`.
+I guess it's clear what we get back.
+But what exactly are we passing here?
+`Base :: Type -> Type -> Type` is defined in
+[Data.Functor.Foldable](https://hackage.haskell.org/package/recursion-schemes-5.2.2.2/docs/Data-Functor-Foldable.html).
+It is an open type family
+and can be thought of a registry of so-called "base functors".
+A base functor, `Base a r`, is a data type that is derived for a specific recursive data type, `a`.
+The type parameter `r` is used to represent recursion in `a`.
+The type `Base a r` is structurally equal to `a`
+except that `r` takes the place of all recursive occurrences of `a` in `a`.
+For instance, the base functor of our `Kont` type from the [previous article](/posts/Unrecurse.html) is:
+
+\begin{code}
+  data KontF next r
+    = FinishedF
+    | MoreF next r
+    deriving stock (Eq, Show, Functor)
+\end{code}
+
+The `r` type parameter appears exactly
+where `Kont next` appears in the original `More` constructor of `Kont next`.
+
+It is customary to name the base functor and its constructors
+after the recursive data type they are associated with (in this case, `Kont`)
+except for appending the letter `F` for "functor".
+Like the name suggests,
+a base functor is always a functor in the type parameter `r`,
+and Haskell can derive that instance for us. Neat.
+
+We can write the following type family instance:
+
+\begin{code}
+  type instance Base (Kont next) = KontF next
+\end{code}
+
+This tells Haskell that the base functor of `Kont` is `KontF`.
+
+How is all this going to help us?
+
+Like we said before,
+the argument of `linearizeStep` is of type `Base a (TTape t)`.
+If `a` were `Kont next`,
+then `Base a (TTape t)` would be `KontF next (TTape t)`.
+And, likewise, if `a` were `Tree Int`,
+then `Base a (TTape t)` would be `TreeF Int (TTape t)`.
+That means that `linearizeStep` always works on
+a version of `a` where recursive constructors are replaced with token tapes, `r ~ TTape t`:
+
+Linearization Example
+---------------------
+
+To get an idea of what `linearizeStep` actually does,
+let's look at how things play out for `a ~ Kont Int`.
+
+First, the base case.
+For a finished continuation, `FinishedF`,
+our encoding should look like this:
+
+\begin{code}
+  -- | A linearized finished continuation.
+  -- >>> linearizedFinished
+  -- Tape {unTape = [L]}
+  linearizedFinished :: TTape []
+  linearizedFinished =
+    let finished :: KontF Int (TTape []) = FinishedF
+    in linearizeStep finished
+\end{code}
+
+The base case is particularly easy to deal with
+since the `FinishedF` constructor has no arguments.
+The only information we need to encode is the constructor itself.
+We use the token `L` (for "left") to represent `FinishedF`,
+because it appears on the left side in the sum type `KontF`.
+Thus, the `linearizedFinished` tape has one element: the token `L`.
+
+Now, let's look at the recursive case:
+For a continuation with one more step, `MoreF`,
+the situation is more complicated, but only slightly so.
+
+\begin{code}
+  -- | A linearized continuation with one more step.
+  -- >>> linearizedMore linearizedFinished
+  -- Tape {unTape = [R,I 0,Rec 1,L]}
+  -- >>> linearizedMore (linearizedMore linearizedFinished)
+  -- Tape {unTape = [R,I 0,Rec 4,R,I 0,Rec 1,L]}
+  -- >>> linearizedMore (linearizedMore (linearizedMore linearizedFinished))
+  -- Tape {unTape = [R,I 0,Rec 7,R,I 0,Rec 4,R,I 0,Rec 1,L]}
+  linearizedMore :: TTape [] -> TTape []
+  linearizedMore previousTape =
+    let more :: KontF Int (TTape []) = MoreF 0 previousTape
+    in linearizeStep more
+\end{code}
+
+I hope the examples make it clear enough that:
+
+1. `R` (for "right") is the token for `MoreF`.
+2. `I 0` (for "integer") is the token for the first argument of `MoreF`, which is always `0 :: Int` in this contrived example.
+3. `Rec _` is the token for the recursive case. Its argument counts the number of tokens needed to encode it. This just measures the length of the previous tape.
+
+Note how, in the above examples, calls to `linearizedMore` are nested to create a tape
+that encodes progressively more recursive calls to the `MoreF` constructor.
+What we have done here manually is done for us automatically by `linearize`
+thanks to the `Recursive` type class and `cata`:
+
+\begin{code}
+  -- >>> linearize (Finished :: Kont Int) :: TTape []
+  -- Tape {unTape = [L]}
+  -- >>> linearize (More 0 $ Finished :: Kont Int) :: TTape []
+  -- Tape {unTape = [R,I 0,Rec 1,L]}
+  -- >>> linearize (More 0 $ More 0 $ Finished :: Kont Int) :: TTape []
+  -- Tape {unTape = [R,I 0,Rec 4,R,I 0,Rec 1,L]}
+  -- >>> linearize (More 0 $ More 0 $ More 0 $ Finished :: Kont Int) :: TTape []
+  -- Tape {unTape = [R,I 0,Rec 7,R,I 0,Rec 4,R,I 0,Rec 1,L]}
+\end{code}
+
+If we had `linearizeStep` already,
+then the only thing we would need to do to get this behaviour is to
+define an instance of the `Recursive` class for `Kont next`, like so:
+
+\begin{code}
+  instance Recursive (Kont next) where
+    project :: Kont next -> KontF next (Kont next)
+    project (More n k) = MoreF n k
+    project Finished = FinishedF
+\end{code}
+
+`project` tells Haskell how a single layer of a `Kont next` value is unrolled
+into a `KontF next (Kont next)` value.
+The rest is taken care of by the `cata` function.
+
+What's missing is an implementation of `linearizeStep`.
+
+Generic Stepwise Linearization
+------------------------------
+
+We can formally introduce `linearizeStep` like this:
+
+\begin{code}
+  class ToTokensStep (t :: Type -> Type) (base :: Type -> Type) where
+    linearizeStep :: To t (base (TTape t))
+\end{code}
+
+The `ToTokensStep` type class is parameterized by the type of the token tape, `t`,
+and the base functor of the recursive data type, `base`.
+We will use datatype-generic programming to implement this class:
+
+\begin{code}
+    default linearizeStep ::
+      ( Alternative t,
+        Foldable t,
+        Generic (base (TTape t)),
+        GToTokensStep t (Rep (base (TTape t)))
+      ) =>
+      To t (base (TTape t))
+    linearizeStep = gLinearizeStep . GHC.Generics.from
+\end{code}
+
+This `default` implementation is just a wrapper around `gLinearizeStep`,
+defined below:
+
+\begin{code}
+  class GToTokensStep (t :: Type -> Type) (f :: Type -> Type) where
+    gLinearizeStep :: forall a. To t (f a)
+\end{code}
+
+This follows the usual pattern for datatype-generic programming in Haskell.
+In particular, this says that,
+if our base functor has a `Generic` instance with generic representation
+`Rep (base r)`,
+then we can obtain a `ToTokensStep` instance 
+(and thus `linearizeStep`) for free.
+
+`GHC.Generics.from` will convert a `base r` value into a `Rep (base r)` value.
+The latter represents `base r` using only generic primitive types.
+These types are defined in the `GHC.Generics` module and are:
+
+* `V1` for impossible values (`Void`). This is used for types that have no constructors. We can't represent `Void` in our token tape.
+* `U1` for constructors without arguments like `()` or `Finished`.
+* `K1` for constants like `True` or `1`. This is used for constructor arguments. These could be recursive values.
+* `M1` for meta data. This is a wrapper and used to encode constructor or data type names.
+* `(:*:)` for product types. This is used to separate constructor arguments.
+* `(:+:)` for sum types. This is used to encode a choice between two constructors.
+
+If you have never seen these types before,
+you may want to read some of the
+[documentation](https://hackage.haskell.org/package/base-4.16.0.0/docs/GHC-Generics.html)
+in the `GHC.Generics` module.
+There are some examples that will help you understand the types
+better than I can in this tutorial.
+
+We only need to specify once what should happen for the six generic types.
+For `V1`, we can't do anything:
+
+\begin{code}
+  instance GToTokensStep t V1 where
+    gLinearizeStep v = v `seq` error "GToTokensStep.V1"
+\end{code}
+
+For `U1`, we can just ignore it:
+
+\begin{code}
+  instance Alternative t => GToTokensStep t U1 where
+    gLinearizeStep _ = Tape empty
+\end{code}
+
+For `K1`, we can just delegate to `linearize`:
+
+\begin{code}
+  instance ToTokens t c => GToTokensStep t (K1 i c) where
+    gLinearizeStep = linearize . unK1
+\end{code}
+
+When specialized to `K1 i Int`,
+this instance is used to convert an `Int` constant
+appearing in `KontF Int r` into a tape of a single `I` token:
+
+\begin{code}
+  instance (Alternative t) => ToTokens t Int where
+    linearize i = pure (I i)
+\end{code}
+
+Moreover,
+when specialized to `K1 i (TTape t)`,
+the `K1` instance defines
+what should happen for a `TTape t` constant
+in `KontF next (TTape t)`.
+This is the trick that allows us to deal with recursive constructor arguments:
+
+\begin{code}
+  instance (Alternative t, Foldable t) => ToTokens t (TTape t) where
+    linearize tape = pure (Rec $ length tape) <|> tape
+\end{code}
+
+Here we use `length` to measure the length of the tape.
+We store that length in a `Rec` token
+that we prepend to the tape using `<|>`.
+This length information will be helpful later
+when we want to decode the tape back into a value.
+
+For `M1`, we can just unwrap the constructor:
+
+\begin{code}
+  instance GToTokensStep t f => GToTokensStep t (M1 i c f) where
+    gLinearizeStep = gLinearizeStep . unM1
+\end{code}
+
+For `(f :*: g)`, we can just delegate to the `GToTokensStep` instances of `f` and `g`:
+
+\begin{code}
+  instance
+    ( Alternative t,
+      Foldable t,
+      GToTokensStep t f,
+      GToTokensStep t g
+    ) =>
+    GToTokensStep t (f :*: g)
+    where
+    gLinearizeStep (x :*: y) = gLinearizeStep x <|> gLinearizeStep y
+\end{code}
+
+The tapes of the two `f` and `g` values are concatenated using `<|>`.
+
+Finally, we can define an instance for `(f :+: g)`:
+
+\begin{code}
+  instance
+    ( Applicative t,
+      Alternative t,
+      Foldable t,
+      GToTokensStep t f,
+      GToTokensStep t g
+    ) =>
+    GToTokensStep t (f :+: g)
+    where
+    gLinearizeStep (L1 x) = pure L <|> gLinearizeStep x
+    gLinearizeStep (R1 x) = pure R <|> gLinearizeStep x
+\end{code}
+
+We use `pure L` and `pure R` to encode the left and right constructor.
+
+
+
+
+
+\begin{code}
+  deriving stock instance Generic (KontF next r)
+
+  instance (Alternative t, Foldable t, ToTokens t next) => ToTokensStep t (KontF next)
+
+  instance (ToTokensStep t (KontF next)) => ToTokens t (Kont next)
+\end{code}
+
+We now need come up with an implementation of `linearizeStep` that does that.
+
+
+
+
+
+\begin{code}
   type From b t a = StateT (TTape t) b a
 \end{code}
 
@@ -155,67 +554,6 @@ in a linear data structure, a tape, in a fashion that allows us to [tbd]
 \end{code}
 
 \begin{code}
-  class ToTokens (t :: Type -> Type) (a :: Type) where
-    linearize :: To t a
-    default linearize :: (Recursive a, ToTokensStep t (Base a)) => To t a
-    linearize = cata linearizeStep
-\end{code}
-
-\begin{code}
-  instance (Alternative t) => ToTokens t Int where
-    linearize i = pure (I i)
-
-  instance (Alternative t, Foldable t) => ToTokens t (TTape t) where
-    linearize tape = pure (Rec $ length tape) <|> tape
-
-  class ToTokensStep (t :: Type -> Type) (base :: Type -> Type) where
-    linearizeStep :: To t (base (TTape t))
-    default linearizeStep ::
-      ( Alternative t,
-        Foldable t,
-        Generic (base (TTape t)),
-        GToTokensStep t (Rep (base (TTape t)))
-      ) =>
-      To t (base (TTape t))
-    linearizeStep = gLinearizeStep . GHC.Generics.from
-
-  class GToTokensStep (t :: Type -> Type) (f :: Type -> Type) where
-    gLinearizeStep :: forall a. To t (f a)
-
-  instance GToTokensStep t V1 where
-    gLinearizeStep v = v `seq` error "GToTokensStep.V1"
-
-  instance Alternative t => GToTokensStep t U1 where
-    gLinearizeStep _ = Tape empty
-
-  instance
-    ( Applicative t,
-      Alternative t,
-      Foldable t,
-      GToTokensStep t f,
-      GToTokensStep t g
-    ) =>
-    GToTokensStep t (f :+: g)
-    where
-    gLinearizeStep (L1 x) = pure L <|> gLinearizeStep x
-    gLinearizeStep (R1 x) = pure R <|> gLinearizeStep x
-
-  instance
-    ( Alternative t,
-      Foldable t,
-      GToTokensStep t f,
-      GToTokensStep t g
-    ) =>
-    GToTokensStep t (f :*: g)
-    where
-    gLinearizeStep (x :*: y) = gLinearizeStep x <|> gLinearizeStep y
-
-  instance ToTokens t c => GToTokensStep t (K1 i c) where
-    gLinearizeStep = linearize . unK1
-
-  instance GToTokensStep t f => GToTokensStep t (M1 i c f) where
-    gLinearizeStep = gLinearizeStep . unM1
-
   class FromTokensStep (b :: Type -> Type) (t :: Type -> Type) (base :: Type -> Type) where
     parseStep :: From b t (base (TTape t))
     default parseStep ::
