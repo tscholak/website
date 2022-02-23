@@ -35,7 +35,6 @@ tags:
   import Control.Applicative (Alternative (empty, (<|>)))
   import Control.Lens
     ( Cons (_Cons),
-      Prism,
       cons,
       prism,
       uncons,
@@ -53,7 +52,7 @@ tags:
   import Control.Monad.Trans (MonadTrans (lift))
   import Control.Monad.Writer (Writer, execWriter, tell)
   import Data.Coerce (coerce)
-  import Data.Functor.Foldable (Base, Corecursive (embed), Recursive (cata, project))
+  import Data.Functor.Foldable (Base, Corecursive (embed), Recursive (cata, project), refix)
   import Data.Functor.Foldable.TH (makeBaseFunctor)
   import Data.Kind (Type)
   import Data.Maybe (fromJust)
@@ -75,7 +74,7 @@ tags:
 The Flattening of A Tree
 ------------------------
 
-[Previously](/posts/Unrecurse.html),
+[Last time](/posts/Unrecurse.html) on this channel,
 we have seen how one can remove recursive calls from a function.
 We learned about continuations, defunctionalization, and monadic `State` effects.
 We used these techniques to reimplement two simple recursive functions,
@@ -83,16 +82,18 @@ We used these techniques to reimplement two simple recursive functions,
 These functions are both specific examples of a `fold`.
 They consume a value of type `Tree`,
 a data type for binary trees with two constructors, `Nil` and `Node`.
-The `Tree` data structure is reduced bit by bit
-to an effect (in the case of `printTree`) or a value (in the case of `accumTree`).
+`printTree` reduces the tree bit by bit in depth-first left-to-right order
+to an effect, that is, printing each leaf value to stdout as it is encountered.
+And `accumTree` reduces the tree to value, that is, the sum of all leaf values.
 
-Even though we worked very hard,
-our attempts to remove all recursion from our program were incomplete:
-the `Tree` type was and remains recursively defined.
-Its `Node` constructor takes two `Tree` values as arguments
-which makes `Tree` a recursive data type.
-Last time, we did not dare to remove this kind of recursion.
-This time, we are more ambitious. By the end of this article,
+Even though we worked very hard to remove all recursion from these functions,
+we still have a problem.
+The definition of the `Tree` type was and remains self-referential.
+Its `Node` constructor takes two `Tree` values as arguments,
+and that makes `Tree` a *recursive data type*.
+We did not dare to remove this kind of recursion.
+This time, we are more ambitious.
+By the end of this article,
 we will know how to remove recursion from a data type.
 
 The high-level idea is that
@@ -109,12 +110,15 @@ As usual, we need a few ingredients:
 * A base functor for the `Tree` type that can be used to construct or deconstruct a tree iteratively.
 * Lots and lots of boilerplaty Haskell `Generic` code.
 
+We will cover these ingredients in detail in the following sections.
+It will take some time to go through all of them,
+but the idea is that you can get a feel for how they work.
 We shall start by defining the `Token` and `Tape` types.
 
 Token Tapes
 -----------
 
-We define the tape as a `newtype` wrapper
+We define our tape as a `newtype` wrapper
 around an underlying type constructor, `t :: Type -> Type`:
 
 \begin{code}
@@ -132,11 +136,12 @@ around an underlying type constructor, `t :: Type -> Type`:
 \end{code}
 
 The type `t` could be `[]`, `Seq`, `Vector`, `Deque`, etc.
-We won't make a choice at this point.
+It doesn't matter, we won't make a choice at this point.
 The only requirement is that there is a way to attach or detach elements
 on the left side of `t`.
 The `Cons` data class provides a way to formalize this requirement,
-and the following code propagates this requirement to the `Tape` type:
+and the following code propagates this requirement to the `Tape` type
+by means of coercion:
 
 \begin{code}
   instance
@@ -155,10 +160,14 @@ This class instance gives us a
 that can be used to build or deconstruct a `Tape`
 via the `cons` and `uncons` functions from
 [Control.Lens.Cons](https://hackage.haskell.org/package/lens-5.1/docs/Control-Lens-Cons.html).
+They basically work like `:` and `uncons` from `Data.List`,
+but they are polymorphic in the type of the `t` constructor
+and thus can be used with any `t` that satisfies the `Cons` requirement.
 
 Let's now talk about what we are going to put on the tape.
-Our tapes will be made up of `Token`s.
-Thus, it is a good idea to save us some keystrokes and use a type synonym:
+Our tapes will be made up entirely of `Token`s, to be defined momentarily.
+Because of that homogeneity,
+it is a good idea to save us some keystrokes and use a handy type synonym:
 
 \begin{code}
   -- | A tape of tokens.
@@ -167,7 +176,7 @@ Thus, it is a good idea to save us some keystrokes and use a type synonym:
 
 Each `Token` will be used to represent
 a piece of information about a particular `Tree`.
-For trees with integer leaf nodes, `Tree Int`,
+For trees with integer leaf nodes, i.e. `Tree Int`,
 we will only ever need four `Token`s:
 
 \begin{code}
@@ -183,25 +192,27 @@ we will only ever need four `Token`s:
     deriving stock (Eq, Show)
 \end{code}
 
-I will explain each of these tokens in more detail later.
+I will explain each of these tokens in more detail in a bit.
+Their function will become clear as we go along.
 
 Linearization
 -------------
 
-How do we turn a `Tree` into a `Tape`?
+Now, how do we turn a `Tree` into a `TTape`?
 
-We want a function, let's call it `linearize`,
-that returns a lossless encoding
-of values of some type `a` into a tape of tokens, `TTape t`.
+In general,
+we want a function -- let's call it `linearize` --
+that turns a value of some type `a` into a tape of tokens without losing any information.
 `a` could be any type,
-but we want this to work for `a ~ Tree Int` in the end.
-Therefore, our `linearize` will have the type:
+but we explicitly want this to work for `a ~ Tree Int` in the end.
+
+Let's give `linearize` a type signature:
 
 \begin{code}
   type To t a = a -> TTape t
 \end{code}
 
-We can formalize this by defining a type class:
+And, because we like to keep things formal, a formal definition:
 
 \begin{code}
   class
@@ -212,12 +223,14 @@ We can formalize this by defining a type class:
     linearize :: To t a
 \end{code}
 
-To make this as general as possible,
-this class is parameterized by the tape's type parameter, `t`,
-and the type of the values we are going to encode, `a`.
+This is Haskell, and the way of Haskell is to make things as general as possible.
+For that reason,
+this class is parameterized not only by 
+the type of the values we are going to encode, `a`,
+but also by the tape's type parameter, `t`.
 
-`linearize` has a `default` implementation that uses
-the accurately named yet mysterious `Recursive` class:
+To annoy you a bit,
+I will give `linearize` an arcane `default` implementation:
 
 \begin{code}
     default linearize ::
@@ -228,40 +241,44 @@ the accurately named yet mysterious `Recursive` class:
     linearize = cata linearizeStep
 \end{code}
 
-`Recursive` gives us `cata`
-which we use to recursively encode values of type `a` into `TTape t`.
-Both, `Recursive` and `cata`, are defined in
+This definition uses the accurately named yet mysterious `Recursive` class.
+`Recursive` gives us `cata`.
+Both of these are defined in
 [Data.Functor.Foldable](https://hackage.haskell.org/package/recursion-schemes-5.2.2.2/docs/Data-Functor-Foldable.html).
-`cata` is a generalization of `fold` and takes two arguments:
+The `cata` function is a generalization of `fold` and takes two arguments:
 
-* A function that performs one step of a recursive computation. Here, that function is `linearizeStep`. It has the type `Base a (TTape t) -> TTape t`.
+* A function that performs one step of a recursive computation. For us, that function is `linearizeStep` which is doing the actual work. It has the type `Base a (TTape t) -> TTape t`.
 * The value that needs to be worked on. That value has the type `a`.
 
-With these, `cata` returns a value of type `TTape t`.
-This machinery is a bit opaque.
+With these, `cata` is recursively chewing up the value `a` and turning it into a `TTape t`.
+I admit, this machinery is a wee opaque.
 I will try my best to explain what is going on.
+Stay with me.
 
 Base Functors
 -------------
 
-Let's zoom in on the cryptic type of `linearizeStep`.
-It is a function that takes a value of type `Base a (TTape t)`
-and returns a value of type `TTape t`.
-I guess it's clear what we get back, a tape of tokens.
-But what exactly are we passing here?
-`Base :: Type -> (Type -> Type)` is defined in
+Let's first zoom in on the cryptic type of `linearizeStep`.
+This is a function that takes a value of type `Base a (TTape t)`
+and gives us back a value of type `TTape t`.
+I guess it's clear what comes out of this function (a tape of tokens),
+but what in tarnation are we passing here?
+What's `Base`, and why is it parameterized by both `a` and our trusty token tape type?
+
+`Base :: Type -> (Type -> Type)`, as it turns out, is also coming from
 [Data.Functor.Foldable](https://hackage.haskell.org/package/recursion-schemes-5.2.2.2/docs/Data-Functor-Foldable.html).
 It is an open type family
-and can be thought of as a registry of so-called "base functors".
-A base functor, `Base a r`, is a data type that is derived
-for a specific recursive data type, `a`.
-The type parameter `r` is used to represent recursion in `a`.
-
-The data type `Base a r` is structurally equal to `a`
+and can be thought of as a type-level registry of so-called "base functors".
+A registered base functor, `Base a r`, is a non-recursive data type
+that is derived for a specific recursive data type, `a`.
+The type parameter `r` is used to represent recursion in `a`. How?
+Think of it in the following way:
+`Base a r` is structurally equal to `a`
 except that `r` takes the place of all recursive occurrences of `a` in `a`.
 
 For instance,
-the base functor of our `Kont` type from the [previous article](/posts/Unrecurse.html) is:
+the base functor of our `Kont` type from
+the [previous installment](/posts/Unrecurse.html) of this series is:
 
 \begin{code}
   -- | A base functor for `Kont`.
@@ -308,15 +325,21 @@ then `Base a r` would be `TreeF Int (TTape t)`.
 That means that `linearizeStep` always works on
 a version of `a` where
 recursive constructors are replaced with token tapes,
-`r ~ TTape t`:
+`r ~ TTape t`.
+
+We now understand that `linearizeStep` takes
+a special non-recursive version of `a` and that
+it is supposed to produce a token tape.
+But how should this transformation look like?
 
 Linearization Example
 ---------------------
 
-To get an idea of what `linearizeStep` actually does,
-let's look at how things play out for `a ~ Kont Int`.
+Let's look at a concrete example
+and try to understand how thinks should play out for `a ~ Kont Int`.
+This is a bit easier than reaching immediately for trees.
 
-First, the base case.
+First, consider the base case.
 For a finished continuation, `FinishedF`,
 our encoding should look like this:
 
@@ -331,16 +354,17 @@ our encoding should look like this:
      in linearizeStep finished
 \end{code}
 
-The base case is particularly easy to deal with
+This base case is particularly easy to deal with
 since the `FinishedF` constructor has no arguments.
 The only information we need to encode is the constructor itself.
-We use the token `L` (for "left") to represent `FinishedF`,
+I use the token `L` (for "left") to represent `FinishedF`,
 because it appears on the left side in the sum type `KontF`.
-Thus, the `linearizedFinished` tape has one element: the token `L`.
+Thus, the `linearizedFinished` tape should have one element: the token `L`.
 
-Now, let's look at the recursive case:
+Now, let's take a look at the recursive case:
 For a continuation with one more step, `MoreF`,
 the situation is more complicated, but only slightly so.
+I propose the following encoding:
 
 \begin{code}
   -- | A linearized continuation with one more step.
@@ -357,16 +381,16 @@ the situation is more complicated, but only slightly so.
      in linearizeStep more
 \end{code}
 
-I hope the examples make it clear enough that:
+I hope the examples make it clear enough that in this encoding:
 
 1. `R` (for "right") is the token for `MoreF`.
 2. `I 0` (for "integer") is the token for the first argument of `MoreF`, which is always `0 :: Int` in this contrived example.
-3. `Rec _` is the token for the recursive case. Its argument counts the number of tokens needed to encode it. This just measures the length of the previous tape.
+3. `Rec _` is the token for the recursive case. Its argument counts the number of tokens needed to encode it. Effectively, this just measures the length of the previous tape we pass to the `linearizedMore` function.
 
 Note how, in the above examples,
 calls to `linearizedMore` are nested to create a tape
 that encodes progressively more recursive calls to the `MoreF` constructor.
-What we have done here manually is done for us automatically by `linearize`
+What I have done here manually will in the end be done for us automatically by `linearize`
 thanks to the `Recursive` type class and `cata`:
 
 \begin{code}
@@ -380,9 +404,9 @@ thanks to the `Recursive` type class and `cata`:
   -- Tape {unTape = [R,I 0,Rec 7,R,I 0,Rec 4,R,I 0,Rec 1,L]}
 \end{code}
 
-If we had `linearizeStep` already,
+If we had a working implementation of `linearizeStep` already,
 then the only thing we would need to do to get this behaviour is to
-define an instance of the `Recursive` class for `Kont next`, like so:
+define an instance of the `Recursive` type class for `Kont next`, like so:
 
 \begin{code}
   instance Recursive (Kont next) where
@@ -393,11 +417,19 @@ define an instance of the `Recursive` class for `Kont next`, like so:
     project Finished = FinishedF
 \end{code}
 
-`project` tells Haskell how a single layer of a `Kont next` value is unrolled
+This implementation of `project`
+tells Haskell how a single layer of a `Kont next` value is unrolled
 into a `KontF next (Kont next)` value.
 The rest is taken care of by the `cata` function.
+I can recommend you to read the newly revised
+[documentation](https://hackage.haskell.org/package/recursion-schemes-5.2.2.2#readme-container)
+of the recursion schemes package to get an even better understanding
+of the principles behind this approach.
 
-What's missing is an implementation of `linearizeStep`.
+Good, we have a more or less clear picture of
+how `linearizeStep` is supposed to work.
+What's missing is an implementation.
+Next up: an implementation.
 
 Generic Stepwise Linearization
 ------------------------------
@@ -413,9 +445,16 @@ We can formally introduce `linearizeStep` like this:
     linearizeStep :: To t (base (TTape t))
 \end{code}
 
-The `ToTokensStep` type class is parameterized by the type of the token tape, `t`,
-and the base functor of the recursive data type, `base`.
-We will use datatype-generic programming to implement this class:
+Like `ToTokens`, the `ToTokensStep` type class is parameterized by the type of the token tape, `t`.
+But instead of the `a` type, we've got another parameter, `base`, for its base functor.
+
+I promised oodles of boilerplate code,
+and I am happy to announce that you won't be disappointed.
+We will use
+[datatype-generic programming](https://downloads.haskell.org/ghc/latest/docs/html/users_guide/exts/generics.html)
+to implement this class.
+
+Have a look at the following `default` implementation:
 
 \begin{code}
     default linearizeStep ::
@@ -430,7 +469,7 @@ We will use datatype-generic programming to implement this class:
         . GHC.Generics.from
 \end{code}
 
-This `default` implementation is just a wrapper around `gLinearizeStep`,
+Of course, that's just a wrapper around `gLinearizeStep`,
 defined below:
 
 \begin{code}
@@ -541,7 +580,7 @@ For `M1`, we can just unwrap the constructor:
 \end{code}
 
 For the product `(f :*: g)`,
-we can just delegate to the `GToTokensStep` instances of `f` and `g`:
+we can delegate to the `GToTokensStep` instances of `f` and `g`:
 
 \begin{code}
   instance
@@ -579,22 +618,23 @@ Finally, we can define an instance for the sum `(f :+: g)`:
 We use `pure L` and `pure R` to encode the left and right constructor.
 
 This concludes the definition of `GToTokensStep`
-and the datatype-generic programming exercise for `ToTokensStep`.
+and the boilerplaty datatype-generic programming exercise for `ToTokensStep`.
 
 Auto-Generating `ToTokens` Instances
 ------------------------------------
 
-We can now obtain `ToTokens` instances for all base functors.
+Perhaps this was lost in the noise,
+but we can now automatically generate `ToTokens` instances!
 
-Let's start with the base functor `KontF` for the `Kont` data type:
+For the `Kont` data type, this is done in three steps:
 
-First, we need to ask Haskell to generate a `Generic` instance for `KontF`:
+Step 1: Ask Haskell to generate a `Generic` instance for `Kont`'s base functor, `KontF`.
 
 \begin{code}
   deriving stock instance Generic (KontF next r)
 \end{code}
 
-Then, we can obtain a `ToTokensStep` instance from the default implementation:
+Step 2: Obtain a `ToTokensStep` instance from the default implementation.
 
 \begin{code}
   instance
@@ -602,7 +642,7 @@ Then, we can obtain a `ToTokensStep` instance from the default implementation:
     ToTokensStep t (KontF next)
 \end{code}
 
-Finally, we can use this instance to obtain a `ToTokens` instance:
+Step 3: Earn a `ToTokens` instance.
 
 \begin{code}
   instance
@@ -610,29 +650,36 @@ Finally, we can use this instance to obtain a `ToTokens` instance:
     ToTokens t (Kont next)
 \end{code}
 
-Now we can linearize a `Kont next` value into a `TTape t` value
-(if we have a `ToTokens` instance for `next`).
+With these we can convert a `Kont next` value into a `TTape t` value
+(if we also happen to have a `ToTokens` instance for `next`).
+And we know that this is true because this is a literate Haskell article,
+and all previously seen examples were in fact already working.
+Surprise!
 
-This is nice,
-but we were originally interested in values of type `Tree Int`.
-Are we any closer to linearizing those?
+Originally,
+we were interested in values of type `Tree Int`.
+Perhaps you remember.
+Are we any closer to linearizing those, too?
 We are. We can automagically generate now everything we need.
 
 We defined the base functor `KontF` for the `Kont` data type manually.
-This was a bit tedious, but it helped us understand base functor types.
-Now, rather than going through the trouble of writing our own base functor for `Tree`,
-we can use `makeBaseFunctor` to do it for us.
-`makeBaseFunctor` is a [Template Haskell](https://en.wikipedia.org/wiki/Template_Haskell) function
+This was a bit tedious,
+but it helped us understand base functor types.
+Now, rather than going through the trouble of writing our own base functor for `Tree`
+(or any other data type `a`),
+we can use `makeBaseFunctor` to do this for us.
+`makeBaseFunctor` is
+a [Template Haskell](https://en.wikipedia.org/wiki/Template_Haskell) function
 that generates the base functor for the `Tree` type and calls it `TreeF`.
 
 \begin{code}
   makeBaseFunctor ''Tree
 \end{code}
 
-This also generates `Base` and `Recursive` instances for `Tree`,
+This little trick also generates `Base` and `Recursive` instances for `Tree`,
 among a few other things that we don't need to worry about right now.
 
-However, this doesn't generate a `Show` or `Generic` instance for `TreeF`,
+However, we don't get a `Show` or `Generic` instance for `TreeF`,
 so let's quickly add those:
 
 \begin{code}
@@ -670,21 +717,27 @@ Let's see what we can do with this:
 
 There you have it,
 we can flatten binary trees and store them in tapes of tokens.
+Cool stuff!
 
 Parsing Tapes of Tokens
 -----------------------
 
 How can we go back from a `TTape t` value to a `Tree` value?
 
-The answer is parsing.
+The answer is *parsing*.
 [Many](https://hackage.haskell.org/package/parsec)
 [parsing](https://hackage.haskell.org/package/megaparsec)
 [libraries](https://hackage.haskell.org/package/attoparsec)
 [exist](https://hackage.haskell.org/package/trifecta)
 for Haskell,
 but we will use none of them,
-because we need much less than what they offer.
-Instead, we will use a minimal approach based on the state monad transformer, `StateT`.
+because we need a lot less than what they offer.
+Instead, we will use a minimal approach to parsing
+based on the state monad transformer, `StateT`.
+
+It is a little-known fact that `StateT`
+enables [monadic parsing](http://www.cs.nott.ac.uk/~pszgmh/pearl.pdf)
+with backtracking.
 
 The counterpart to `To t a` is:
 
