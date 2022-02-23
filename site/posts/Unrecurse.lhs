@@ -19,7 +19,7 @@ image: goodbye.gif
 Preliminaries
 -------------
 
-For this literal Haskell essay, a few language extensions are required.
+For this literate Haskell essay, a few language extensions are required.
 Nothing extraordinarily fancy, just the usually fancy Haskell flavour.
 
 \begin{code}
