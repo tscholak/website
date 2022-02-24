@@ -733,28 +733,57 @@ for Haskell,
 but we will use none of them,
 because we need a lot less than what they offer.
 Instead, we will use a minimal approach to parsing
-based on the state monad transformer, `StateT`.
+based on the good old state monad transformer, `StateT`.
+We know it well from the [previous article](/posts/Unrecurse.html).
 
 It is a little-known fact that `StateT`
-enables [monadic parsing](http://www.cs.nott.ac.uk/~pszgmh/pearl.pdf)
-with backtracking.
+already provides all that we need to implement a
+[monadic parser](http://www.cs.nott.ac.uk/~pszgmh/pearl.pdf).
+It even supports backtracking.
+This may be surprising,
+since `StateT s b a` is just a `newtype` wrapper around
+`s -> b (a, s)`,
+where `s` is the state's type,
+and `b` is the type of some inner monad.
+Why should this matter for parsing?
+Well, that's because, at its most fundamental level,
+*a parser for things `a` is a function
+from strings `s` to lists `b ~ []` of pairs `(a, s)` of things and strings*.
+That's a little Seussian rhyme I borrowed from 
+[Fritz Ruehr](http://www.willamette.edu/~fruehr/haskell/seuss.html).
+It means that if we have a string `s` and a parser `StateT s b a` with `b ~ []`,
+then running the parser on `s` will return:
 
-The counterpart to `To t a` is:
+* an empty list if there is no way to create an `a` from any prefix of the input string `s` (including the empty string) or
+* a non-empty list of full and/or partial parses of `s`, where each pair in the list belongs to one alternative parse of `s`. The first part of a pair is the parsing result, `a`, and the second part is the unconsumed remainder of the input string.
+
+There may be a very long list of alternatives, but for `b ~ []` those are lazily evaluated.
+This is why we can think of `StateT s [] a` as a parser with backtracking.
+If we don't want backtracking, we can use `StateT s Maybe a` instead.
+Then we will only ever get zero or one parse. If we get `Nothing`, the parse failed. If we get `Just`, the parse succeeded.
+For `b ~ Maybe`, we can never explore more than one alternative.
+We are greedily parsing, and committing to the first alternative that succeeds is a final decision.
+`b` should always be a monad with a `MonadPlus` instance for supporting choice (`mplus`) and failure (`mzero`).
+`[]`, `Maybe`, and `LogicT` from [Control.Monad.Logic](https://hackage.haskell.org/package/logict)
+fulfil this requirement, but there are many monads that do not.
+
+In Haskell, a string is a list of characters.
+Here, we have a tape of tokens.
+If we want to parse a tape of tokens,
+then we should be able to do that with this state monad transformer:
 
 \begin{code}
   type From b t a = StateT (TTape t) b a
 \end{code}
 
-
-
-There And Back Again
---------------------
-
-
-
-
+This is the counterpart to `To t a` that we have been using to flatten trees into tapes of tokens.
+To go the other way, we need to define a value of type `From b t a`.
+It will need to be made such that it is compatible with how we defined `To t a` above
+and undoes the flattening we engineered there.
+We will build this value from the ground up starting with simplest parser we can write down:
 
 \begin{code}
+  -- | A parser that consumes a single token from the tape and returns it.
   token ::
     forall b t.
     ( MonadFail b,
@@ -768,7 +797,17 @@ There And Back Again
       Just (x, xs) -> put xs >> pure x
 \end{code}
 
+This parser just tries to take the first token from the tape and yields it,
+no matter what the token is.
+If there are no tokens left, it fails.
+The `MonadFail` constraint is needed for the `fail` function,
+and the `Cons` constraint is needed for the `uncons` function.
+
+The second most simple parser we can write is one that consumes a single token and
+returns it only if it matches a given predicate:
+
 \begin{code}
+  -- | A parser that matches a given token and returns it.
   isToken ::
     forall b t.
     ( MonadFail b,
@@ -779,6 +818,27 @@ There And Back Again
     From b t Token
   isToken t = mfilter (== t) token
 \end{code}
+
+The `mfilter` function is a monadic version of `filter` and provided by the `MonadPlus` requirement.
+
+These two parsers, `token` and `isToken`, will turn out to be everything we need.
+We will use *combinator functions* to combine them again and again
+until we get to the final parser that solves our problem.
+The combinators will mostly be provided by the `Alternative` and `MonadPlus` instances of `From b t`.
+This will become much clearer in the next section.
+It's all about the combinators from here.
+There is [documentation](https://en.wikibooks.org/wiki/Haskell/Alternative_and_MonadPlus) on the subject
+for those who are interested, but it should not be necessary to read this to understand the rest of this article.
+
+There And Back Again
+--------------------
+
+
+
+
+
+
+
 
 \begin{code}
   class
@@ -882,9 +942,6 @@ There And Back Again
             parseStep
               >>= traverse (resetParse go)
 \end{code}
-
-
-With this, we can auto-derive a bunch of instances for the `TreeF` and `Tree` types:
 
 \begin{code}
   instance
