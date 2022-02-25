@@ -3,8 +3,19 @@ title: "Flattening -- How to Get from A Tree to A Flat Shape And Back Again"
 date: Feb 2, 2022
 teaser: >
 tags:
-  items: [haskell, recursion]
+  items: [haskell, recursion, generics, parsing]
+image: tape.gif
 ---
+
+Preliminaries
+-------------
+
+This is a literate Haskell essay.
+Every line of program code in this article has been checked by the Haskell compiler.
+Every example and property in the Haddock comments has been tested by the doctest tool.
+
+To make this a proper Haskell file, it needs a header.
+There are several language extensions we need to enable:
 
 \begin{code}
   {-# LANGUAGE TypeApplications #-}
@@ -29,6 +40,9 @@ tags:
   {-# LANGUAGE InstanceSigs #-}
 \end{code}
 
+Nice, this is more looking like your typical Haskell file now.
+We will also need to import some libraries, functions, and types:
+
 \begin{code}
   module Flattening where
 
@@ -52,7 +66,7 @@ tags:
   import Control.Monad.Trans (MonadTrans (lift))
   import Control.Monad.Writer (Writer, execWriter, tell)
   import Data.Coerce (coerce)
-  import Data.Functor.Foldable (Base, Corecursive (embed), Recursive (cata, project), refix)
+  import Data.Functor.Foldable (Base, Corecursive (embed), Recursive (cata, project))
   import Data.Functor.Foldable.TH (makeBaseFunctor)
   import Data.Kind (Type)
   import Data.Maybe (fromJust)
@@ -70,6 +84,9 @@ tags:
   import Unrecurse (Continue (..), Kont (..), Stack, Tree, exampleTree, pop, push, while)
   import Prelude hiding (even, odd)
 \end{code}
+
+Ok, enough beating around the bush.
+Now we can start with the actual content of the essay.
 
 The Flattening of A Tree
 ------------------------
@@ -111,9 +128,10 @@ As usual, we need a few ingredients:
 * Lots and lots of boilerplaty Haskell `Generic` code.
 
 We will cover these ingredients in detail in the following sections.
-It will take some time to go through all of them,
-but the idea is that you can get a feel for how they work.
-We shall start by defining the `Token` and `Tape` types.
+It will take some time to go through all of them.
+The slow pace will help you to can get a feel for all this stuff.
+We shall now start by defining the `Token` and `Tape` types.
+Chocks away!
 
 Token Tapes
 -----------
@@ -160,14 +178,14 @@ This class instance gives us a
 that can be used to build or deconstruct a `Tape`
 via the `cons` and `uncons` functions from
 [Control.Lens.Cons](https://hackage.haskell.org/package/lens-5.1/docs/Control-Lens-Cons.html).
-They basically work like `:` and `uncons` from `Data.List`,
-but they are polymorphic in the type of the `t` constructor
+They basically work like `(:)` and `uncons` from `Data.List`,
+but they are polymorphic in the type `t`
 and thus can be used with any `t` that satisfies the `Cons` requirement.
 
 Let's now talk about what we are going to put on the tape.
 Our tapes will be made up entirely of `Token`s, to be defined momentarily.
 Because of that homogeneity,
-it is a good idea to save us some keystrokes and use a handy type synonym:
+it is a good idea to save us some keystrokes and forge a handy type synonym:
 
 \begin{code}
   -- | A tape of tokens.
@@ -223,13 +241,16 @@ And, because we like to keep things formal, a formal definition:
     linearize :: To t a
 \end{code}
 
-This is Haskell, and the way of Haskell is to make things as general as possible.
+This is Haskell.
+And, in case you haven't noticed,
+the way of Haskell is to make things as general as possible,
+sometimes until it hurts.
 For that reason,
 this class is parameterized not only by 
 the type of the values we are going to encode, `a`,
 but also by the tape's type parameter, `t`.
 
-To annoy you a bit,
+To annoy you further,
 I will give `linearize` an arcane `default` implementation:
 
 \begin{code}
@@ -265,7 +286,9 @@ I guess it's clear what comes out of this function (a tape of tokens),
 but what in tarnation are we passing here?
 What's `Base`, and why is it parameterized by both `a` and our trusty token tape type?
 
-`Base :: Type -> (Type -> Type)`, as it turns out, is also coming from
+`Base :: Type -> (Type -> Type)`,
+as it turns out,
+is also coming from
 [Data.Functor.Foldable](https://hackage.haskell.org/package/recursion-schemes-5.2.2.2/docs/Data-Functor-Foldable.html).
 It is an open type family
 and can be thought of as a type-level registry of so-called "base functors".
@@ -293,7 +316,7 @@ the [previous installment](/posts/Unrecurse.html) of this series is:
 The `r` type parameter appears exactly
 where `Kont next` appears in the original `More` constructor of `Kont next`.
 Go back to the definition of `Kont next` and check for yourself
-if you don't believe me.
+if you don't believe me. Off you pop.
 
 Quick side node on naming.
 It is customary to name the base functor and its constructors
@@ -335,8 +358,8 @@ But how should this transformation look like?
 Linearization Example
 ---------------------
 
-Let's look at a concrete example
-and try to understand how thinks should play out for `a ~ Kont Int`.
+Let's dive into a concrete example
+and try to understand how things should play out for `a ~ Kont Int`.
 This is a bit easier than reaching immediately for trees.
 
 First, consider the base case.
@@ -449,10 +472,10 @@ Like `ToTokens`, the `ToTokensStep` type class is parameterized by the type of t
 But instead of the `a` type, we've got another parameter, `base`, for its base functor.
 
 I promised oodles of boilerplate code,
-and I am happy to announce that you won't be disappointed.
+and I am happy to announce that the waiting is over.
 We will use
 [datatype-generic programming](https://downloads.haskell.org/ghc/latest/docs/html/users_guide/exts/generics.html)
-to implement this class.
+to implement this class!
 
 Have a look at the following `default` implementation:
 
@@ -481,12 +504,17 @@ defined below:
     gLinearizeStep :: forall a. To t (rep a)
 \end{code}
 
-This follows the usual pattern for datatype-generic programming in Haskell.
+This follows
+[the](https://wiki.haskell.org/GHC.Generics#More_general_default_methods)
+[usual](https://hackage.haskell.org/package/base-4.16.0.0/docs/GHC-Generics.html#g:13)
+[pattern](https://hackage.haskell.org/package/binary-0.8.9.0/docs/Data-Binary.html#t:Binary)
+for datatype-generic programming in Haskell.
 In particular, this says that,
 if our base functor has a `Generic` instance with generic representation
 `Rep (base r)`,
 then we can obtain a `ToTokensStep` instance 
 (and thus `linearizeStep`) for free.
+Free is very cheap.
 
 `GHC.Generics.from` will convert a `base r` value into a `Rep (base r)` value.
 The latter represents `base r` using only generic primitive types.
@@ -515,7 +543,7 @@ For `V1`, we can't do anything:
       v `seq` error "GToTokensStep.V1"
 \end{code}
 
-For `U1`, we can just ignore it:
+For `U1`, we can just ignore it and return an empty token tape:
 
 \begin{code}
   instance
@@ -550,7 +578,7 @@ appearing in `KontF Int r` into a tape of a single `I` token:
 Moreover,
 when specialized to `K1 i (TTape t)`,
 the `K1` instance defines
-what should happen for a `TTape t` constant
+what should happen for the `TTape t` constants
 in `KontF next (TTape t)`.
 This is the trick that allows us to deal with recursive constructor arguments:
 
@@ -565,7 +593,7 @@ This is the trick that allows us to deal with recursive constructor arguments:
 
 Here we use `length` to measure the length of the tape.
 We store that length in a `Rec` token
-that we prepend to the tape using `<|>`.
+that we prepend to the tape using `(<|>)`.
 This length information will be helpful later
 when we want to decode the tape back into a value.
 
@@ -595,7 +623,7 @@ we can delegate to the `GToTokensStep` instances of `f` and `g`:
       gLinearizeStep x <|> gLinearizeStep y
 \end{code}
 
-The tapes of the two `x :: f a` and `y :: g a` values are concatenated using `<|>`.
+The tapes of the two `x :: f a` and `y :: g a` values are concatenated using `(<|>)`.
 
 Finally, we can define an instance for the sum `(f :+: g)`:
 
@@ -619,6 +647,8 @@ We use `pure L` and `pure R` to encode the left and right constructor.
 
 This concludes the definition of `GToTokensStep`
 and the boilerplaty datatype-generic programming exercise for `ToTokensStep`.
+Wasn't that fun?
+There is more to come.
 
 Auto-Generating `ToTokens` Instances
 ------------------------------------
@@ -763,7 +793,7 @@ If we don't want backtracking, we can use `StateT s Maybe a` instead.
 Then we will only ever get zero or one parse. If we get `Nothing`, the parse failed. If we get `Just`, the parse succeeded.
 For `b ~ Maybe`, we can never explore more than one alternative.
 We are greedily parsing, and committing to the first alternative that succeeds is a final decision.
-`b` should always be a monad with a `MonadPlus` instance for supporting choice (`mplus`) and failure (`mzero`).
+`b` (for "backtracking") should always be a monad with a `MonadPlus` instance for supporting choice (`mplus`) and failure (`mzero`).
 `[]`, `Maybe`, and `LogicT` from [Control.Monad.Logic](https://hackage.haskell.org/package/logict)
 fulfil this requirement, but there are many monads that do not.
 
@@ -822,9 +852,9 @@ returns it only if it matches a given predicate:
 The `mfilter` function is a monadic version of `filter` and provided by the `MonadPlus` requirement.
 
 These two parsers, `token` and `isToken`, will turn out to be everything we need.
-We will use *combinator functions* to combine them again and again
+We will use *combinator functions* to compose them again and again
 until we get to the final parser that solves our problem.
-The combinators will mostly be provided by the `Alternative` and `MonadPlus` instances of `From b t`.
+The combinators will mostly be provided by the `Alternative` and `MonadPlus` instances for `From b t`.
 This will become much clearer in the next section.
 It's all about the combinators from here.
 There is [documentation](https://en.wikibooks.org/wiki/Haskell/Alternative_and_MonadPlus) on the subject
