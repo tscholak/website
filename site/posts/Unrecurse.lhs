@@ -19,7 +19,8 @@ image: goodbye.gif
 Preliminaries
 -------------
 
-For this literate Haskell essay, a few language extensions are required.
+For this [Literate Haskell](https://wiki.haskell.org/Literate_programming) 
+essay, a few language extensions are required.
 Nothing extraordinarily fancy, just the usually fancy Haskell flavour.
 
 \begin{code}
@@ -775,7 +776,7 @@ that executes the `Writer` and `State` effects:
 \begin{code}
   -- | Run the unrolled `accumTree'''''''` program
   -- and calculate the sum of the content values of the tree.
-  -- >>> runAccumTree''''''' exampleTree
+  -- >>> sumTree''''''' exampleTree
   -- 28
   sumTree''''''' :: Num a => Tree a -> a
   sumTree''''''' tree =

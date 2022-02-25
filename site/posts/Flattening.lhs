@@ -10,7 +10,7 @@ image: tape.gif
 Preliminaries
 -------------
 
-This is a literate Haskell essay.
+This is a [Literate Haskell](https://wiki.haskell.org/Literate_programming) essay:
 Every line of program code in this article has been checked by the Haskell compiler.
 Every example and property in the Haddock comments has been tested by the doctest tool.
 
@@ -99,8 +99,8 @@ We used these techniques to reimplement two simple recursive functions,
 These functions are both specific examples of a `fold`.
 They consume a value of type `Tree`,
 a data type for binary trees with two constructors, `Nil` and `Node`.
-`printTree` reduces the tree bit by bit in depth-first left-to-right order
-to an effect, that is, printing each leaf value to stdout as it is encountered.
+`printTree` reduces the tree node by node in depth-first, left-to-right order
+to an effect, that is, printing each leaf value to `stdout` as it is encountered.
 And `accumTree` reduces the tree to value, that is, the sum of all leaf values.
 
 Even though we worked very hard to remove all recursion from these functions,
@@ -268,7 +268,7 @@ Both of these are defined in
 [Data.Functor.Foldable](https://hackage.haskell.org/package/recursion-schemes-5.2.2.2/docs/Data-Functor-Foldable.html).
 The `cata` function is a generalization of `fold` and takes two arguments:
 
-* A function that performs one step of a recursive computation. For us, that function is `linearizeStep` which is doing the actual work. It has the type `Base a (TTape t) -> TTape t`.
+* A function that performs one step of a recursive computation. For us, that function is `linearizeStep` that is doing the actual work. It has the type `Base a (TTape t) -> TTape t`.
 * The value that needs to be worked on. That value has the type `a`.
 
 With these, `cata` is recursively chewing up the value `a` and turning it into a `TTape t`.
@@ -407,7 +407,7 @@ I propose the following encoding:
 I hope the examples make it clear enough that in this encoding:
 
 1. `R` (for "right") is the token for `MoreF`.
-2. `I 0` (for "integer") is the token for the first argument of `MoreF`, which is always `0 :: Int` in this contrived example.
+2. `I 0` (for "integer") is the token for the first argument of `MoreF`. That argument is always `0 :: Int` in this contrived example.
 3. `Rec _` is the token for the recursive case. Its argument counts the number of tokens needed to encode it. Effectively, this just measures the length of the previous tape we pass to the `linearizedMore` function.
 
 Note how, in the above examples,

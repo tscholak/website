@@ -35,9 +35,11 @@
         };
 
         website = haskellNix.website.components.exes.website;
+        website-doctests = haskellNix.website.components.tests.doctests;
       in rec {
         packages = {
           inherit website;
+          inherit website-doctests;
         };
 
         apps.website = utils.lib.mkApp {
