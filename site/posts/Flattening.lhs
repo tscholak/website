@@ -810,7 +810,7 @@ This is the counterpart to `To t a` that we have been using to flatten trees int
 To go the other way, we need to define a value of type `From b t a`.
 It will need to be made such that it is compatible with how we defined `To t a` above
 and undoes the flattening we engineered there.
-We will build this value from the ground up starting with simplest parser we can write down:
+We will build this value from the ground up starting with the simplest parser we can write down:
 
 \begin{code}
   -- | A parser that consumes a single token from the tape and returns it.
@@ -834,7 +834,7 @@ The `MonadFail` constraint is needed for the `fail` function,
 and the `Cons` constraint is needed for the `uncons` function.
 
 The second most simple parser we can write is one that consumes a single token and
-returns it only if it matches a given predicate:
+returns it if and only if it matches a given predicate:
 
 \begin{code}
   -- | A parser that matches a given token and returns it.
