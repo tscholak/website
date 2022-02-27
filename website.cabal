@@ -64,8 +64,6 @@ executable website
       Contact
     , Unrecurse
     , Flattening
-    , Paths_website
-  autogen-modules: Paths_website
   hs-source-dirs:
       app
     , site
@@ -77,4 +75,6 @@ test-suite doctests
   hs-source-dirs: doctests
   x-doctest-options: --no-magic
   main-is: Doctests.hs
-  build-depends: doctest
+  build-depends:
+      doctest
+    , QuickCheck

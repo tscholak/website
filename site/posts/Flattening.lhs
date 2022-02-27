@@ -1,7 +1,16 @@
 ---
-title: "Flattening -- How to Get from A Tree to A Flat Shape And Back Again"
+title: "How to Get from A Tree to A Flat Shape And Back Again"
 date: Feb 2, 2022
 teaser: >
+  The adventure continues in this "Unrecurse" sequel.
+  Previously, we bravely faced turmoil and confusion
+  in a cruel world in which Haskell suddenly stopped supporting recursion function calls.
+  We barely escaped the wrath of the compiler.
+  This time, we try to survive an even more extreme situation:
+  Haskell without recursive data types!
+  It is the ultimate test of our programming skills.
+  Will we make it through the final challenge, or is all hope lost?
+  Join us in this journey about tapes and tribulations.
 tags:
   items: [haskell, recursion, generics, parsing]
 image: tape.gif
@@ -13,6 +22,7 @@ Preliminaries
 This is a [Literate Haskell](https://wiki.haskell.org/Literate_programming) essay:
 Every line of program code in this article has been checked by the Haskell compiler.
 Every example and property in the Haddock comments has been tested by the doctest tool.
+I thank the [Haskell community](https://wiki.haskell.org/Haskell) for making this possible.
 
 To make this a proper Haskell file, it needs a header.
 There are several language extensions we need to enable:
@@ -40,8 +50,8 @@ There are several language extensions we need to enable:
   {-# LANGUAGE InstanceSigs #-}
 \end{code}
 
-Nice, this is more looking like your typical Haskell file now.
-We will also need to import some libraries, functions, and types:
+Nice, this is more looking like your typical fancy Haskell file now.
+We will also need to import a meager handful of libraries, functions, and types:
 
 \begin{code}
   module Flattening where
@@ -81,9 +91,40 @@ We will also need to import some libraries, functions, and types:
       type (:*:) ((:*:)),
       type (:+:) (L1, R1),
     )
-  import Unrecurse (Continue (..), Kont (..), Stack, Tree, exampleTree, pop, push, while)
+  import Unrecurse (Continue (..), Kont (..), Stack, Tree (..), exampleTree, pop, push, while)
   import Prelude hiding (even, odd)
 \end{code}
+
+You will notice that we are importing definitions
+from the `Unrecurse` module,
+which belongs to the [previous article](/posts/Unrecurse.html)
+in this series.
+
+For the `Tree` type from the `Unrecurse` module,
+we need a QuickCheck random generator to run property tests:
+
+\begin{code}
+  -- $setup
+  -- >>> import Test.QuickCheck
+  -- >>> instance Arbitrary a => Arbitrary (Tree a) where arbitrary = sized arbTree
+  -- >>> :{
+  --   arbTree :: Arbitrary a => Int -> Gen (Tree a)
+  --   arbTree 0 = pure Nil
+  --   arbTree n =
+  --     frequency
+  --       [ (1, pure Nil),
+  --         ( 3,
+  --           Node
+  --             <$> arbTree (div n 2)
+  --             <*> arbitrary
+  --             <*> arbTree (div n 2)
+  --         )
+  --       ]
+  -- :}
+\end{code}
+
+This should create random binary trees with a frequency distribution
+that is exponentially decreasing in the number of constructors.
 
 Ok, enough beating around the bush.
 Now we can start with the actual content of the essay.
@@ -100,18 +141,19 @@ These functions are both specific examples of a `fold`.
 They consume a value of type `Tree`,
 a data type for binary trees with two constructors, `Nil` and `Node`.
 `printTree` reduces the tree node by node in depth-first, left-to-right order
-to an effect, that is, printing each leaf value to `stdout` as it is encountered.
-And `accumTree` reduces the tree to value, that is, the sum of all leaf values.
+to an effect: leaf values are printed to `stdout` as they are encountered.
+On the other hand,
+`accumTree` reduces the tree to value, that is, the sum of all leaf values.
 
 Even though we worked very hard to remove all recursion from these functions,
 we still have a problem.
-The definition of the `Tree` type was and remains self-referential.
-Its `Node` constructor takes two `Tree` values as arguments,
-and that makes `Tree` a *recursive data type*.
-We did not dare to remove this kind of recursion.
-This time, we are more ambitious.
-By the end of this article,
-we will know how to remove recursion from a data type.
+The definition of the `Tree` type was and remains self-referential:
+its `Node` constructor takes two `Tree` values as arguments.
+That makes `Tree` a *recursive data type*,
+and that is FORBIDDEN in recursion-free Haskell.
+Sorry, I don't make the rules.
+So far, we did not dare to remove recursion from the `Tree` data type.
+This time, we are more ambitious!
 
 The high-level idea is that
 we are going to store our `Tree` in a linear data structure we call a `Tape`.
@@ -216,11 +258,12 @@ Their function will become clear as we go along.
 Linearization
 -------------
 
-Now, how do we turn a `Tree` into a `TTape`?
+Now, how do we turn a tree into a token tape?
 
 In general,
 we want a function -- let's call it `linearize` --
-that turns a value of some type `a` into a tape of tokens without losing any information.
+that turns a value of some type `a` into a tape of tokens, `TTape t`,
+without losing any information.
 `a` could be any type,
 but we explicitly want this to work for `a ~ Tree Int` in the end.
 
@@ -238,6 +281,7 @@ And, because we like to keep things formal, a formal definition:
       (t :: Type -> Type)
       (a :: Type)
     where
+    -- | Convert a value of type `a` into a tape of tokens.
     linearize :: To t a
 \end{code}
 
@@ -465,6 +509,7 @@ We can formally introduce `linearizeStep` like this:
       (t :: Type -> Type)
       (base :: Type -> Type)
     where
+    -- | A stepwise linearization of a value of type `base (TTape t)`.
     linearizeStep :: To t (base (TTape t))
 \end{code}
 
@@ -501,6 +546,7 @@ defined below:
       (t :: Type -> Type)
       (rep :: Type -> Type)
     where
+    -- | A generic implementation of `linearizeStep`.
     gLinearizeStep :: forall a. To t (rep a)
 \end{code}
 
@@ -787,15 +833,22 @@ then running the parser on `s` will return:
 * an empty list if there is no way to create an `a` from any prefix of the input string `s` (including the empty string) or
 * a non-empty list of full and/or partial parses of `s`, where each pair in the list belongs to one alternative parse of `s`. The first part of a pair is the parsing result, `a`, and the second part is the unconsumed remainder of the input string.
 
-There may be a very long list of alternatives, but for `b ~ []` those are lazily evaluated.
+There may be a very long list of alternatives,
+but for `b ~ []` those are lazily evaluated.
 This is why we can think of `StateT s [] a` as a parser with backtracking.
 If we don't want backtracking, we can use `StateT s Maybe a` instead.
-Then we will only ever get zero or one parse. If we get `Nothing`, the parse failed. If we get `Just`, the parse succeeded.
+Then we will only ever get zero or one parse.
+If we get `Nothing`, the parse failed.
+If we get `Just`, the parse succeeded.
 For `b ~ Maybe`, we can never explore more than one alternative.
-We are greedily parsing, and committing to the first alternative that succeeds is a final decision.
-`b` (for "backtracking") should always be a monad with a `MonadPlus` instance for supporting choice (`mplus`) and failure (`mzero`).
-`[]`, `Maybe`, and `LogicT` from [Control.Monad.Logic](https://hackage.haskell.org/package/logict)
-fulfil this requirement, but there are many monads that do not.
+We are greedily parsing, and committing to the first alternative
+that succeeds is a final decision.
+`b` (for "backtracking") should always be a monad
+with a `MonadPlus` instance for supporting choice (`mplus`) and failure (`mzero`).
+`[]`, `Maybe`, and `LogicT` from
+[Control.Monad.Logic](https://hackage.haskell.org/package/logict)
+fulfil this requirement,
+but there are many monads that do not.
 
 In Haskell, a string is a list of characters.
 Here, we have a tape of tokens.
@@ -806,11 +859,14 @@ then we should be able to do that with this state monad transformer:
   type From b t a = StateT (TTape t) b a
 \end{code}
 
-This is the counterpart to `To t a` that we have been using to flatten trees into tapes of tokens.
+This is the counterpart to `To t a`
+that we have been using to flatten trees into tapes of tokens.
 To go the other way, we need to define a value of type `From b t a`.
-It will need to be made such that it is compatible with how we defined `To t a` above
+It will need to be made such that it is compatible
+with how we defined `To t a` above
 and undoes the flattening we engineered there.
-We will build this value from the ground up starting with the simplest parser we can write down:
+We will build this value from the ground up starting
+with the simplest parser we can write down:
 
 \begin{code}
   -- | A parser that consumes a single token from the tape and returns it.
@@ -849,22 +905,105 @@ returns it if and only if it matches a given predicate:
   isToken t = mfilter (== t) token
 \end{code}
 
-The `mfilter` function is a monadic version of `filter` and provided by the `MonadPlus` requirement.
+The `mfilter` function is a monadic version of `filter`
+and provided by the `MonadPlus` requirement.
 
-These two parsers, `token` and `isToken`, will turn out to be everything we need.
+These two parsers, `token` and `isToken`,
+will turn out to be everything we need.
 We will use *combinator functions* to compose them again and again
 until we get to the final parser that solves our problem.
-The combinators will mostly be provided by the `Alternative` and `MonadPlus` instances for `From b t`.
+The combinators will mostly be provided by
+the `Alternative` and `MonadPlus` instances for `From b t`.
 This will become much clearer in the next section.
 It's all about the combinators from here.
-There is [documentation](https://en.wikibooks.org/wiki/Haskell/Alternative_and_MonadPlus) on the subject
-for those who are interested, but it should not be necessary to read this to understand the rest of this article.
+There is [documentation](https://en.wikibooks.org/wiki/Haskell/Alternative_and_MonadPlus)
+on the subject for those who are interested,
+but it should not be necessary to read this to understand the rest of this article.
 
 There And Back Again
 --------------------
 
+We'd like to be able to go back and forth between token tapes and `Tree` values:
 
+\begin{code}
+  -- |
+  -- prop> \tree -> evalStateT parse (linearize @[] tree) == Just (tree :: Tree Int)
+\end{code}
 
+This is a *there-and-back-again* property.
+It says that if we have a `Tree Int` value,
+then we can first linearize it into a token tape,
+and then parse it back into the same `Tree Int` value we started with.
+No treasure is lost or gained by this process.
+Not even a small chest.
+
+The function `parse` is the final parser we need.
+A formal definition of `parse` is:
+
+\begin{code}
+  class
+    FromTokens
+      (b :: Type -> Type)
+      (t :: Type -> Type)
+      (a :: Type)
+    where
+    -- | Parse a value of type `a` from a list of tokens.
+    parse :: From b t a
+\end{code}
+
+We parameterize `FromTokens` on the backtracking monad, `b`,
+the tape type, `t`, and the type of the value we want to parse, `a`.
+Like `linearize`, `parse` has an annoyingly opaque `default` implementation:
+
+\begin{code}
+    default parse ::
+      ( Corecursive a,
+        Monad b,
+        Traversable (Base a),
+        FromTokensStep b t (Base a)
+      ) =>
+      From b t a
+    parse = go
+      where
+        go =
+          fmap embed $
+            parseStep
+              >>= traverse (resetParse go)
+\end{code}
+
+Let's take this apart, and see what it does.
+The helper `go` replaces `cata` in the `default` implementation of `linearize`
+from before.
+`go` is a recursive descent parser that
+repeatedly calls the stepwise parser from the `FromTokensStep` constraint,
+`parseStep :: From b t (Base a (TTape t))`.
+We haven't defined `parseStep` and `FromTokensStep` yet, but we will.
+`parseStep` is a parser that returns a base functor for the type `a`,
+where unused tokens are wrapped in token tapes that appear
+in the recursive positions of `a` in `a` (thus `r ~ TType t`).
+Those tapes are then parsed by `parseStep` again and again,
+until we get a base functor value that contains no token tapes.
+For `TreeF`, that would be `NilF`.
+If we naively glued the base functors coming out of this recursion together,
+we would get a value of type
+`Base a (Base a (Base a (Base ... )))`.
+However, we cannot work with this type directly,
+because it would depend on the runtime value of the token tape:
+the more nested the encoded value, the more nested the type.
+Instead, we need to incrementally roll the functors up into an `a` value.
+We can do this by using the `Corecursive` constraint,
+which is the counterpart to `Recursive` from before.
+`Corecursive` gives us `embed :: Base a a -> a`,
+the inverse of `project`, which is exactly what we need.
+
+\begin{code}
+  -- | Run a parser on a tape, and
+  -- lift the result(s) into the parent parsing scope.
+  -- Unused tokens are discarded.
+  resetParse :: Monad b => 
+    From b t a -> TTape t -> From b t a
+  resetParse m = lift . evalStateT m
+\end{code}
 
 
 
@@ -877,6 +1016,7 @@ There And Back Again
       (t :: Type -> Type)
       (base :: Type -> Type)
     where
+    -- | A stepwise parser of a value of type `base (TTape t)`.
     parseStep :: From b t (base (TTape t))
     default parseStep ::
       ( Functor b,
@@ -892,6 +1032,7 @@ There And Back Again
       (t :: Type -> Type)
       (rep :: Type -> Type)
     where
+    -- | A generic implementation of `parseStep`.
     gParseStep :: forall a. From b t (rep a)
 
   instance
@@ -947,33 +1088,6 @@ There And Back Again
 \end{code}
 
 \begin{code}
-  resetParse :: Monad b => 
-    From b t a -> TTape t -> From b t a
-  resetParse m = lift . evalStateT m
-
-  class
-    FromTokens
-      (b :: Type -> Type)
-      (t :: Type -> Type)
-      (a :: Type)
-    where
-    parse :: From b t a
-    default parse ::
-      ( Corecursive a,
-        Monad b,
-        Traversable (Base a),
-        FromTokensStep b t (Base a)
-      ) =>
-      From b t a
-    parse = go
-      where
-        go =
-          fmap embed $
-            parseStep
-              >>= traverse (resetParse go)
-\end{code}
-
-\begin{code}
   instance
     ( MonadFail b,
       MonadPlus b,
@@ -1017,10 +1131,6 @@ There And Back Again
             go n' = cons <$> token <*> go (n' - 1)
         _ -> fail "expected Rec"
 \end{code}
-
-```
-evalStateT parse (linearize @[] exampleTree) == Just exampleTree
-```
 
 \begin{code}
   data NextF a r = FirstF r | SecondF a | ThirdF r
