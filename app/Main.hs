@@ -142,6 +142,7 @@ data SiteMeta f = SiteMeta
     siteTwitchHandle :: !(f (Maybe String)),
     siteYoutubeHandle :: !(f (Maybe String)),
     siteGithubUser :: !(f (Maybe String)),
+    siteGoogleScholarHandle :: !(f (Maybe String)),
     siteGithubRepository :: !(f (Maybe URI))
   }
   deriving stock (Generic)
@@ -249,6 +250,14 @@ configParser = Barbie.bmap (Compose . optional) parser
                           <> Options.metavar "GITHUB-USER"
                           <> Options.help "The github user of the author of the site"
                       ),
+                siteGoogleScholarHandle =
+                  Just
+                    <$> Options.strOption
+                      ( Options.long "google-scholar-handle"
+                          <> Options.short 's'
+                          <> Options.metavar "GOOGLE-SCHOLAR-HANDLE"
+                          <> Options.help "The google scholar handle of the author of the site"
+                      ),
                 siteGithubRepository =
                   Just
                     <$> Options.option
@@ -278,6 +287,7 @@ configErrors =
             siteTwitchHandle = "twitch handle",
             siteYoutubeHandle = "youtube handle",
             siteGithubUser = "github user",
+            siteGoogleScholarHandle = "google scholar handle",
             siteGithubRepository = "github repository"
           }
     }
