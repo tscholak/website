@@ -56,7 +56,6 @@ common shared-properties
     , vector
   ghc-options: -W -Wall -O2 -threaded -rtsopts -with-rtsopts=-N
 
-
 executable website
   import: shared-properties
   main-is: Main.hs
@@ -73,8 +72,10 @@ test-suite doctests
   import: shared-properties
   type: exitcode-stdio-1.0
   hs-source-dirs: doctests
-  x-doctest-options: --no-magic
+  x-doctest-options: --no-magic --verbose
+  x-doctest-components: exe:website
   main-is: Doctests.hs
   build-depends:
       doctest
     , QuickCheck
+    , template-haskell

@@ -4,7 +4,8 @@ date: Feb 2, 2022
 teaser: >
   The adventure continues in this "Unrecurse" sequel.
   Previously, we bravely faced turmoil and confusion
-  in a cruel world in which Haskell suddenly stopped supporting recursion function calls.
+  in a cruel world in which Haskell suddenly stopped supporting
+  recursive function calls.
   We barely escaped the wrath of the compiler.
   This time, we try to survive an even more extreme situation:
   Haskell without recursive data types!
@@ -101,12 +102,12 @@ which belongs to the [previous article](/posts/Unrecurse.html)
 in this series.
 
 For the `Tree` type from the `Unrecurse` module,
-we need a QuickCheck random generator to run property tests:
+we need a QuickCheck random generator to run property tests
+with `doctest`:
 
 \begin{code}
   -- $setup
   -- >>> import Test.QuickCheck
-  -- >>> instance Arbitrary a => Arbitrary (Tree a) where arbitrary = sized arbTree
   -- >>> :{
   --   arbTree :: Arbitrary a => Int -> Gen (Tree a)
   --   arbTree 0 = pure Nil
@@ -121,6 +122,8 @@ we need a QuickCheck random generator to run property tests:
   --         )
   --       ]
   -- :}
+  --
+  -- >>> instance Arbitrary a => Arbitrary (Tree a) where arbitrary = sized arbTree
 \end{code}
 
 This should create random binary trees with a frequency distribution
@@ -461,6 +464,7 @@ What I have done here manually will in the end be done for us automatically by `
 thanks to the `Recursive` type class and `cata`:
 
 \begin{code}
+  -- |
   -- >>> linearize (Finished :: Kont Int) :: TTape []
   -- Tape {unTape = [L]}
   -- >>> linearize (More 0 $ Finished :: Kont Int) :: TTape []
@@ -926,18 +930,18 @@ There And Back Again
 We'd like to be able to go back and forth between token tapes and `Tree` values:
 
 \begin{code}
-  -- |
+  -- | `parse` is the inverse of `linearize`.
   -- prop> \tree -> evalStateT parse (linearize @[] tree) == Just (tree :: Tree Int)
 \end{code}
 
 This is a *there-and-back-again* property.
-It says that if we have a `Tree Int` value,
+It says that, if we have a `Tree Int` value,
 then we can first linearize it into a token tape,
 and then parse it back into the same `Tree Int` value we started with.
 No treasure is lost or gained by this process.
 Not even a small chest.
 
-The function `parse` is the final parser we need.
+The function `parse` returns the parser we need.
 A formal definition of `parse` is:
 
 \begin{code}
@@ -975,15 +979,16 @@ Let's take this apart, and see what it does.
 The helper `go` replaces `cata` in the `default` implementation of `linearize`
 from before.
 `go` is a recursive descent parser that
-repeatedly calls the stepwise parser from the `FromTokensStep` constraint,
-`parseStep :: From b t (Base a (TTape t))`.
-We haven't defined `parseStep` and `FromTokensStep` yet, but we will.
+repeatedly calls the stepwise parser `parseStep`.
+This parser comes from the `FromTokensStep` constraint
+and has the type: `parseStep :: From b t (Base a (TTape t))`.
+We haven't defined `parseStep` and `FromTokensStep` yet, but we will shortly.
 `parseStep` is a parser that returns a base functor for the type `a`,
-where unused tokens are wrapped in token tapes that appear
-in the recursive positions of `a` in `a` (thus `r ~ TType t`).
+where unused tokens are wrapped in token tapes `TTape t` that appear
+in the recursive positions of `a` in `a`.
 Those tapes are then parsed by `parseStep` again and again,
-until we get a base functor value that contains no token tapes.
-For `TreeF`, that would be `NilF`.
+until we get a base functor value that contains no token tapes
+(for `TreeF`, that would be `NilF`).
 If we naively glued the base functors coming out of this recursion together,
 we would get a value of type
 `Base a (Base a (Base a (Base ... )))`.
@@ -1103,7 +1108,6 @@ the inverse of `project`, which is exactly what we need.
 \end{code}
 
 \begin{code}
-
   instance
     ( MonadFail b,
       Cons (TTape t) (TTape t) Token Token
@@ -1188,10 +1192,7 @@ the inverse of `project`, which is exactly what we need.
     ToTokensStep t (SumF a)
 
   instance
-    ( Alternative t,
-      Foldable t,
-      ToTokens t a
-    ) =>
+    ToTokensStep t (SumF a) =>
     ToTokens t (Sum a)
 
   instance
@@ -1203,140 +1204,18 @@ the inverse of `project`, which is exactly what we need.
     FromTokensStep b t (SumF a)
 
   instance
-    ( Monad b,
-      Alternative t,
-      Foldable t,
-      FromTokens b t a
-    ) =>
+    (Monad b, FromTokensStep b t (SumF a)) =>
     FromTokens b t (Sum a)
 \end{code}
 
 \begin{code}
-  -- | Run stuff
-  -- >>> r
+  -- | Calculate the sum of the content values of the linearized example tree.
+  -- >>> sumTree''''''''
   -- Sum {getSum = 28}
-  r :: Sum Int
-  r = execWriter $ runStateT (accumTree'''''''' @Vector) (linearize $ Sum <$> exampleTree, [])
-\end{code}
-
-Mutual Recursion
-----------------
-
-\begin{code}
-  even :: Int -> Bool
-  even 0 = True
-  even n = odd (n - 1)
-
-  odd :: Int -> Bool
-  odd 0 = False
-  odd n = even (n - 1)
-\end{code}
-
-<https://www.haskellforall.com/2012/06/you-could-have-invented-free-monads.html>
-<https://www.tweag.io/blog/2018-02-05-free-monads/>
-<https://gist.github.com/eamelink/4466932a11d8d92a6b76e80364062250>
-
-The trampoline is the Free monad.
-
-\begin{code}
-  data Trampoline f r
-    = Trampoline {bounce :: f (Trampoline f r)}
-    | Done {result :: r}
-
-  instance Functor f => Functor (Trampoline f) where
-    fmap f (Trampoline m) = Trampoline (fmap (fmap f) m)
-    fmap f (Done r) = Done (f r)
-
-  instance Functor f => Applicative (Trampoline f) where
-    pure = Done
-    Done f <*> Done x = Done $ f x
-    Done f <*> Trampoline mx = Trampoline $ fmap f <$> mx
-    Trampoline mf <*> x = Trampoline $ fmap (<*> x) mf
-
-  instance Functor f => Monad (Trampoline f) where
-    return = Done
-    Done x >>= f = f x
-    Trampoline mx >>= f = Trampoline (fmap (>>= f) mx)
-
-  liftF :: Functor f => f r -> Trampoline f r
-  liftF m = Trampoline (fmap Done m)
-\end{code}
-
-The DSL for the even/odd problem.
-
-\begin{code}
-  data EvenOddF next
-    = Even Int (Bool -> next)
-    | Odd Int (Bool -> next)
-    deriving stock (Functor)
-
-  -- instance Functor EvenOddF where
-  --   fmap f (Even n k) = Even n (f . k)
-  --   fmap f (Odd n k) = Odd n (f . k)
-
-  type EvenOdd = Trampoline EvenOddF
-\end{code}
-
-Rewritten in terms of the DSL.
-
-\begin{code}
-  even' :: Int -> EvenOdd Bool
-  even' 0 = Done True
-  even' n = liftF (Odd (n - 1) id)
-
-  odd' :: Int -> EvenOdd Bool
-  odd' 0 = Done False
-  odd' n = liftF (Even (n - 1) id)
-
-  evenOddHandler :: EvenOddF (EvenOdd r) -> EvenOdd r
-  evenOddHandler (Even n k) = even' n >>= k
-  evenOddHandler (Odd n k) = odd' n >>= k
-\end{code}
-
-Reduce a trampoline to a value.
-
-\begin{code}
-  iterTrampoline ::
-    Functor f =>
-    (f (Trampoline f r) -> Trampoline f r) ->
-    Trampoline f r ->
-    r
-  iterTrampoline h = go
-    where
-      go Done {..} = result
-      go Trampoline {..} = go (h bounce)
-\end{code}
-
-Run the trampoline to completion with the even/odd handler.
-
-\begin{code}
-  runEvenOdd :: EvenOdd r -> r
-  runEvenOdd = iterTrampoline evenOddHandler
-\end{code}
-
-<https://stackoverflow.com/questions/57733363/how-to-adapt-trampolines-to-continuation-passing-style>
-
-Fibonacci numbers.
-
-\begin{code}
-  fib :: Int -> Int
-  fib n = go n 0 1
-    where go !n !a !b | n == 0    = a
-                      | otherwise = go (n - 1) b (a + b)
-
-  data FibF next =
-      FibF Int Int Int (Int -> next)
-    deriving stock Functor
-
-  type Fib = Trampoline FibF
-
-  fib' :: Int -> Fib Int
-  fib' n = liftF (FibF n 0 1 id)
-
-  fibHandler :: FibF (Fib r) -> Fib r
-  fibHandler (FibF 0 a _ k) = Done a >>= k
-  fibHandler (FibF n a b k) = liftF (FibF (n - 1) b (a + b) id) >>= k
-
-  runFib :: Fib Int -> Int
-  runFib = iterTrampoline fibHandler
+  sumTree'''''''' :: Sum Int
+  sumTree'''''''' =
+    execWriter $
+      runStateT
+        (accumTree'''''''' @Vector)
+        (linearize $ Sum <$> exampleTree, [])
 \end{code}

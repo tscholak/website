@@ -6,3 +6,5 @@ cradle:
       component: "exe:website"
     - path: "./site/posts"
       component: "exe:website"
+    - path: "./doctests"
+      component: "test:doctests"
