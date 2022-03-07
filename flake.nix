@@ -26,6 +26,10 @@
       url = "github:llvm-hs/llvm-hs?ref=llvm-12";
       flake = false;
     };
+    dex-lang = {
+      url = "github:google-research/dex-lang?ref=f3b8bba3235738908adc1d1fd5ba4cb5ffb48282";
+      flake = false;
+    };
   };
 
   outputs = inputs@{ self, nixpkgs, haskell-nix, utils, ... }:
@@ -56,12 +60,14 @@
                   ps.slick
                   ps.llvm-hs-pure
                   ps.llvm-hs
+                  ps.dex
                 ];
                 cabalProjectLocal = ''
                   packages:
                     ${inputs.slick}
                     ${inputs.llvm-hs}/llvm-hs-pure
                     ${inputs.llvm-hs}/llvm-hs
+                    ${inputs.dex-lang}
                 '';
                 modules = [
                   {
@@ -69,9 +75,9 @@
                     packages.llvm-hs-pure.src = "${inputs.llvm-hs.outPath}/llvm-hs-pure";
                     packages.llvm-hs.src = "${inputs.llvm-hs.outPath}/llvm-hs";
                     packages.llvm-hs.components."library".build-tools = [
-                      # final.hsPkgs.buildPackages.hsc2hs.components.exes.hsc2hs
                       final.buildPackages.llvm_12
                     ];
+                    packages.dex.src = inputs.dex-lang.outPath;
                   }
                 ];
               };

@@ -83,6 +83,23 @@
         "type": "github"
       }
     },
+    "dex-lang": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1646662940,
+        "narHash": "sha256-XUDIv2+CnaRvVrgpD4+Da6DjUK3p3fkipqU8FzhORz4=",
+        "owner": "google-research",
+        "repo": "dex-lang",
+        "rev": "f3b8bba3235738908adc1d1fd5ba4cb5ffb48282",
+        "type": "github"
+      },
+      "original": {
+        "owner": "google-research",
+        "ref": "f3b8bba3235738908adc1d1fd5ba4cb5ffb48282",
+        "repo": "dex-lang",
+        "type": "github"
+      }
+    },
     "flake-utils": {
       "locked": {
         "lastModified": 1644229661,
@@ -299,6 +316,7 @@
     },
     "root": {
       "inputs": {
+        "dex-lang": "dex-lang",
         "haskell-nix": "haskell-nix",
         "llvm-hs": "llvm-hs",
         "nixpkgs": [
