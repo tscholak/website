@@ -34,6 +34,7 @@
         overlays = [
           haskell-nix.overlay
           (final: prev: {
+            # llvm-config = prev.llvmPackages_12.llvm;
             websiteProject =
               final.haskell-nix.project' {
                 src = pkgs.haskell-nix.haskellLib.cleanGit {
@@ -51,7 +52,11 @@
                   nixpkgs-fmt
                 ];
                 shell.exactDeps = true;
-                shell.additional = ps: [ ps.slick ];
+                shell.additional = ps: [
+                  ps.slick
+                  ps.llvm-hs-pure
+                  ps.llvm-hs
+                ];
                 cabalProjectLocal = ''
                   packages:
                     ${inputs.slick}
@@ -61,8 +66,12 @@
                 modules = [
                   {
                     packages.slick.src = inputs.slick.outPath;
-                    packages.llvm-hs-pure.src = inputs.llvm-hs.outPath;
-                    packages.llvm-hs.src = inputs.llvm-hs.outPath;
+                    packages.llvm-hs-pure.src = "${inputs.llvm-hs.outPath}/llvm-hs-pure";
+                    packages.llvm-hs.src = "${inputs.llvm-hs.outPath}/llvm-hs";
+                    packages.llvm-hs.components."library".build-tools = [
+                      # final.hsPkgs.buildPackages.hsc2hs.components.exes.hsc2hs
+                      final.buildPackages.llvm_12
+                    ];
                   }
                 ];
               };
