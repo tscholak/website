@@ -54,6 +54,8 @@ common shared-properties
     , transformers
     , unordered-containers
     , vector
+    , llvm-hs
+    , llvm-hs-pure
   ghc-options: -W -Wall -O2 -threaded -rtsopts -with-rtsopts=-N
 
 executable website

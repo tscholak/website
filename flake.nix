@@ -18,9 +18,17 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     utils.follows = "haskell-nix/flake-utils";
+    slick = {
+      url = "github:ChrisPenner/slick?ref=51d4849e8fe3dad93ef8c10707975068f797fd28";
+      flake = false;
+    };
+    llvm-hs = {
+      url = "github:llvm-hs/llvm-hs?ref=llvm-12";
+      flake = false;
+    };
   };
 
-  outputs = { self, nixpkgs, haskell-nix, utils, ... }:
+  outputs = inputs@{ self, nixpkgs, haskell-nix, utils, ... }:
     utils.lib.eachDefaultSystem (system:
       let
         overlays = [
@@ -43,6 +51,20 @@
                   nixpkgs-fmt
                 ];
                 shell.exactDeps = true;
+                shell.additional = ps: [ ps.slick ];
+                cabalProjectLocal = ''
+                  packages:
+                    ${inputs.slick}
+                    ${inputs.llvm-hs}/llvm-hs-pure
+                    ${inputs.llvm-hs}/llvm-hs
+                '';
+                modules = [
+                  {
+                    packages.slick.src = inputs.slick.outPath;
+                    packages.llvm-hs-pure.src = inputs.llvm-hs.outPath;
+                    packages.llvm-hs.src = inputs.llvm-hs.outPath;
+                  }
+                ];
               };
           })
         ];
@@ -55,5 +77,12 @@
           exePath = "/bin/website";
         };
         defaultApp = apps.website;
+        check = pkgs.runCommand "combined-test"
+          {
+            checksss = builtins.attrValues flake.checks.${system};
+          } ''
+            echo $checksss
+            touch $out
+          '';
       });
 }
