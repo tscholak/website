@@ -78,10 +78,11 @@
                     ];
                     packages.dex.src =
                       final.runCommand "build-dexrt" {} ''
+                        mkdir -p $out
                         cd $out
                         cp -r ${inputs.dex-lang.outPath}/* .
                         set -x
-                        ${final.clang}/bin/clang++ \
+                        ${final.clang_12}/bin/clang++ \
                           -fPIC -std=c++11 -fno-exceptions -fno-rtti \
                           -c -emit-llvm \
                           -I ${final.libpng}/include \
