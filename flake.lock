@@ -100,6 +100,22 @@
         "type": "github"
       }
     },
+    "flake-compat": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1641205782,
+        "narHash": "sha256-4jY7RCWUoZ9cKD8co0/4tFARpWB+57+r1bLLvXNJliY=",
+        "owner": "edolstra",
+        "repo": "flake-compat",
+        "rev": "b7547d3eed6f32d06102ead8991ec52ab0a4f1a7",
+        "type": "github"
+      },
+      "original": {
+        "owner": "edolstra",
+        "repo": "flake-compat",
+        "type": "github"
+      }
+    },
     "flake-utils": {
       "locked": {
         "lastModified": 1644229661,
@@ -171,11 +187,11 @@
         "stackage": "stackage"
       },
       "locked": {
-        "lastModified": 1646638312,
-        "narHash": "sha256-lJ++HRaVuHmbGmyo4dXXbtomXK+v33Q0HCHB1PWa0CY=",
+        "lastModified": 1646739130,
+        "narHash": "sha256-6uP5OaRn0HP790fq37dRGb/uQwEwVJihr9nWEyNS9lw=",
         "owner": "input-output-hk",
         "repo": "haskell.nix",
-        "rev": "b1113d486ffcd65d6527732f9ed5270e58dc4e49",
+        "rev": "95b3617b2af0a04c04f16e4b88df291587f6a418",
         "type": "github"
       },
       "original": {
@@ -317,6 +333,7 @@
     "root": {
       "inputs": {
         "dex-lang": "dex-lang",
+        "flake-compat": "flake-compat",
         "haskell-nix": "haskell-nix",
         "llvm-hs": "llvm-hs",
         "nixpkgs": [

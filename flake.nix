@@ -18,6 +18,10 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     utils.follows = "haskell-nix/flake-utils";
+    flake-compat = {
+      url = "github:edolstra/flake-compat";
+      flake = false;
+    };
     slick = {
       url = "github:ChrisPenner/slick?ref=51d4849e8fe3dad93ef8c10707975068f797fd28";
       flake = false;
@@ -76,13 +80,17 @@
                     packages.llvm-hs.components."library".build-tools = [
                       final.buildPackages.llvm_12
                     ];
+                    # packages.llvm-hs.configureFlags = [
+                    #   "--with-gcc=${final.clang_12}/bin/cc"
+                    #   "--with-ld=${final.clang_12}/bin/ld"
+                    # ];
                     packages.dex.src =
                       final.runCommand "build-dexrt" {} ''
                         mkdir -p $out
                         cp -r ${inputs.dex-lang.outPath}/* $out
                         chmod u+w $out/src/lib
                         set -x
-                        ${final.clang}/bin/clang++ \
+                        ${final.clang_12}/bin/clang++ \
                           -fPIC -std=c++11 -fno-exceptions -fno-rtti \
                           -c -emit-llvm \
                           -I ${final.libpng}/include \
