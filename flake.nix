@@ -38,7 +38,6 @@
         overlays = [
           haskell-nix.overlay
           (final: prev: {
-            # llvm-config = prev.llvmPackages_12.llvm;
             websiteProject =
               final.haskell-nix.project' {
                 src = pkgs.haskell-nix.haskellLib.cleanGit {
@@ -77,7 +76,21 @@
                     packages.llvm-hs.components."library".build-tools = [
                       final.buildPackages.llvm_12
                     ];
-                    packages.dex.src = inputs.dex-lang.outPath;
+                    packages.dex.src =
+                      rec {
+                        outpath = runCommand "build-dexrt" {} ''
+                          cd $out
+                          cp -r ${inputs.dex-lang.outPath}/* .
+                          set -x
+                          ${final.clang}/bin/clang++ \
+                            -fPIC -std=c++11 -fno-exceptions -fno-rtti \
+                            -c -emit-llvm \
+                            -I ${final.libpng}/include \
+                            src/lib/dexrt.cpp \
+                            -o src/lib/dexrt.bc
+                          set +x
+                        '';
+                      };
                   }
                 ];
               };
