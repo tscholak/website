@@ -27,7 +27,7 @@
       flake = false;
     };
     dex-lang = {
-      url = "github:google-research/dex-lang?ref=f3b8bba3235738908adc1d1fd5ba4cb5ffb48282";
+      url = "github:tscholak/dex-lang?ref=920ca8ff00956a17e04185cb5e8b61788fcb241b";
       flake = false;
     };
   };
@@ -79,17 +79,20 @@
                     packages.dex.src =
                       final.runCommand "build-dexrt" {} ''
                         mkdir -p $out
-                        cd $out
-                        cp -r ${inputs.dex-lang.outPath}/* .
+                        cp -r ${inputs.dex-lang.outPath}/* $out
+                        chmod u+w $out/src/lib
                         set -x
-                        ${final.clang_12}/bin/clang++ \
+                        ${final.clang}/bin/clang++ \
                           -fPIC -std=c++11 -fno-exceptions -fno-rtti \
                           -c -emit-llvm \
                           -I ${final.libpng}/include \
-                          src/lib/dexrt.cpp \
-                          -o src/lib/dexrt.bc
+                          $out/src/lib/dexrt.cpp \
+                          -o $out/src/lib/dexrt.bc
                         set +x
+                        chmod u-w $out/src/lib/dexrt.bc
+                        chmod u-w $out/src/lib
                       '';
+                    packages.dex.doHaddock = false;
                   }
                 ];
               };

@@ -86,16 +86,16 @@
     "dex-lang": {
       "flake": false,
       "locked": {
-        "lastModified": 1646662940,
-        "narHash": "sha256-XUDIv2+CnaRvVrgpD4+Da6DjUK3p3fkipqU8FzhORz4=",
-        "owner": "google-research",
+        "lastModified": 1646700362,
+        "narHash": "sha256-QNk3TCopRKSlX9bnhGx2IhNRL3YZKWf2Y53Fwz80678=",
+        "owner": "tscholak",
         "repo": "dex-lang",
-        "rev": "f3b8bba3235738908adc1d1fd5ba4cb5ffb48282",
+        "rev": "920ca8ff00956a17e04185cb5e8b61788fcb241b",
         "type": "github"
       },
       "original": {
-        "owner": "google-research",
-        "ref": "f3b8bba3235738908adc1d1fd5ba4cb5ffb48282",
+        "owner": "tscholak",
+        "ref": "920ca8ff00956a17e04185cb5e8b61788fcb241b",
         "repo": "dex-lang",
         "type": "github"
       }
