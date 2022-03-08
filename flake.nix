@@ -78,7 +78,7 @@
                     ];
                     packages.dex.src =
                       rec {
-                        outpath = runCommand "build-dexrt" {} ''
+                        outpath = final.runCommand "build-dexrt" {} ''
                           cd $out
                           cp -r ${inputs.dex-lang.outPath}/* .
                           set -x
