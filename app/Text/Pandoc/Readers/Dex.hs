@@ -239,10 +239,10 @@ instance ToPandocBlocks Dex.Result where
     errBlocks <- toPandocBlocks err
     return $ outsBlocks <> errBlocks
 
-instance ToPandocBlocks (Dex.Except a) where
+instance ToPandocBlocks (Dex.Except ()) where
   toPandocBlocks err = case err of
-    Dex.Failure er -> undefined
-    Dex.Success x0 -> undefined
+    Dex.Failure er -> pure $ Pandoc.codeBlock . T.pack $ Dex.pprint er
+    Dex.Success _x0 -> pure mempty
 
 instance ToPandocBlocks Dex.Output where
   toPandocBlocks out = case out of
@@ -252,25 +252,27 @@ instance ToPandocBlocks Dex.Output where
       if null . Pandoc.unMeta $ meta
         then pure $ Pandoc.fromList blocks
         else throwError $ Pandoc.PandocParseError "invalid meta for html output"
-    Dex.PassInfo pn s -> undefined
-    Dex.EvalTime x ma -> undefined
-    Dex.TotalTime x -> undefined
-    Dex.BenchResult s x y ma -> undefined
-    Dex.MiscLog s -> undefined
+    -- Dex.PassInfo pn s -> undefined
+    -- Dex.EvalTime x ma -> undefined
+    -- Dex.TotalTime x -> undefined
+    -- Dex.BenchResult s x y ma -> undefined
+    -- Dex.MiscLog s -> undefined
+    _ -> pure $ Pandoc.codeBlock . T.pack $ Dex.pprint out
 
 instance ToPandocBlocks Dex.SourceBlock where
   toPandocBlocks sourceBlock = case Dex.sbContents sourceBlock of
-    Dex.EvalUDecl ud -> undefined
-    Dex.Command cn wse -> undefined
-    Dex.DeclareForeign s uab -> undefined
-    Dex.GetNameType s -> undefined
-    Dex.ImportModule msn -> undefined
-    Dex.QueryEnv eq -> undefined
+    -- Dex.EvalUDecl ud -> undefined
+    -- Dex.Command cn wse -> undefined
+    -- Dex.DeclareForeign s uab -> undefined
+    -- Dex.GetNameType s -> undefined
+    -- Dex.ImportModule msn -> undefined
+    -- Dex.QueryEnv eq -> undefined
     Dex.ProseBlock s -> do
       Pandoc.Pandoc meta blocks <- Pandoc.readCommonMark Pandoc.def . T.pack $ s
       if null . Pandoc.unMeta $ meta
         then pure $ Pandoc.fromList blocks
         else throwError $ Pandoc.PandocParseError "invalid meta for prose block"
-    Dex.CommentLine -> undefined
+    -- Dex.CommentLine -> undefined
     Dex.EmptyLines -> pure mempty
-    Dex.UnParseable b s -> undefined
+    -- Dex.UnParseable b s -> undefined
+    _ -> pure $ Pandoc.codeBlock . T.pack $ Dex.pprint sourceBlock
