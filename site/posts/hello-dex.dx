@@ -1,0 +1,25 @@
+-- ---
+-- title: "Hello Dex"
+-- date: Marc 10, 2022
+-- teaser: >
+--   Say hello to Dex and see how Dex greets you.
+-- tags:
+--   items: [dex]
+-- ---
+
+Height = Fin 3
+Width = Fin 8
+
+x = for i:Height. for j:Width. 1.0
+
+' We can see the type of `x` with `:t`:
+
+:t x
+> ((Fin 3) => (Fin 8) => Float32)
+
+' We can print it, too:
+
+x
+> [ [1., 1., 1., 1., 1., 1., 1., 1.]
+> , [1., 1., 1., 1., 1., 1., 1., 1.]
+> , [1., 1., 1., 1., 1., 1., 1., 1.] ]

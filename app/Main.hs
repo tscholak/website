@@ -27,7 +27,7 @@ import Control.Lens (at, ix, (?~), (^?))
 import Control.Monad (void)
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import Data.Aeson (toJSON)
-import qualified Data.Aeson as A (FromJSON (parseJSON), KeyValue ((.=)), Options (..), Result (Error, Success), ToJSON (toEncoding, toJSON), Value (..), decode', defaultOptions, fromJSON, genericParseJSON, genericToEncoding, genericToJSON, object, withObject, (.:), (.:?))
+import qualified Data.Aeson as A (FromJSON (parseJSON), KeyValue ((.=)), Options (..), Result (Error, Success), ToJSON (toJSON), Value (..), decode', defaultOptions, fromJSON, genericParseJSON, genericToEncoding, genericToJSON, object, withObject, (.:), (.:?))
 import qualified Data.Aeson.KeyMap as KM (mapMaybe, singleton, union)
 import qualified Data.Aeson.Lens as A (AsPrimitive (_String), AsValue (_Object), key, pattern Integer)
 import qualified Data.Aeson.Parser.Internal as A (jsonEOF')
@@ -50,6 +50,7 @@ import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Encoding as TL
 import Data.Time (UTCTime, defaultTimeLocale, formatTime, getCurrentTime, iso8601DateFormat, parseTimeOrError)
 import Data.Vector as V (mapMaybe)
+import qualified Data.Yaml as Yaml
 import Development.Shake (Action, ShakeOptions (..), copyFileChanged, forP, getDirectoryFiles, readFile', shakeOptions, writeFile', pattern Chatty)
 import Development.Shake.Classes (Binary (..))
 import Development.Shake.FilePath (dropDirectory1, takeExtension, (-<.>), (</>))
@@ -58,11 +59,15 @@ import GHC.Generics (Generic)
 import Network.URI (URI (uriPath), parseURI)
 import Network.URI.JSON ()
 import qualified Options.Applicative as Options
-import Slick (compileTemplate', convert, substitute)
-import Slick.Pandoc (defaultHtml5Options, markdownToHTMLWithOpts)
+import qualified PPrint as Dex ()
+import qualified Slick (compileTemplate', convert, substitute)
+import qualified Slick.Pandoc as Slick (defaultHtml5Options, loadUsing, markdownToHTMLWithOpts)
+import qualified Syntax as Dex
 import System.Process (readProcess)
 import Text.Casing (fromHumps, toQuietSnake)
-import qualified Text.Pandoc as P
+import qualified Text.Pandoc as Pandoc
+import qualified Text.Pandoc.Readers.Dex as Pandoc
+import qualified TopLevel as Dex
 
 -- | data type for configuration
 data Config f = Config
@@ -94,35 +99,51 @@ instance (Barbie.AllBF A.ToJSON f Config) => A.ToJSON (Config f) where
   toEncoding = A.genericToEncoding configCustomJSONOptions
 
 -- | markdown options
-markdownOptions :: P.ReaderOptions
+markdownOptions :: Pandoc.ReaderOptions
 markdownOptions =
-  P.def {P.readerExtensions = pandocExtensions}
+  Pandoc.def {Pandoc.readerExtensions = pandocExtensions}
   where
     pandocExtensions =
-      P.disableExtension P.Ext_autolink_bare_uris $
+      Pandoc.disableExtension Pandoc.Ext_autolink_bare_uris $
         mconcat
-          [ P.extensionsFromList
-              [ P.Ext_yaml_metadata_block,
-                P.Ext_fenced_code_attributes,
-                P.Ext_auto_identifiers
+          [ Pandoc.extensionsFromList
+              [ Pandoc.Ext_yaml_metadata_block,
+                Pandoc.Ext_fenced_code_attributes,
+                Pandoc.Ext_auto_identifiers
               ],
-            P.githubMarkdownExtensions
+            Pandoc.githubMarkdownExtensions
           ]
 
 -- | convert markdown to html
 markdownToHTML :: T.Text -> Action A.Value
-markdownToHTML = markdownToHTMLWithOpts markdownOptions defaultHtml5Options
+markdownToHTML = Slick.markdownToHTMLWithOpts markdownOptions Slick.defaultHtml5Options
 
 -- | convert literal Haskell code to html
 codeToHTML :: T.Text -> Action A.Value
-codeToHTML = markdownToHTMLWithOpts opts defaultHtml5Options
+codeToHTML = Slick.markdownToHTMLWithOpts opts Slick.defaultHtml5Options
   where
-    opts = P.def {P.readerExtensions = pandocExtensions}
+    opts = Pandoc.def {Pandoc.readerExtensions = pandocExtensions}
     pandocExtensions =
-      P.extensionsFromList
-        [ P.Ext_literate_haskell,
-          P.Ext_yaml_metadata_block
+      Pandoc.extensionsFromList
+        [ Pandoc.Ext_literate_haskell,
+          Pandoc.Ext_yaml_metadata_block
         ]
+
+-- | convert Dex code to html
+dexToHTML :: T.Text -> Action A.Value
+dexToHTML =
+  Slick.loadUsing
+    (Pandoc.readDex pandocOpts dexOpts)
+    (Pandoc.writeHtml5String Slick.defaultHtml5Options)
+  where
+    pandocOpts = Pandoc.def {Pandoc.readerExtensions = pandocExtensions}
+    pandocExtensions =
+      Pandoc.extensionsFromList
+        [ Pandoc.Ext_yaml_metadata_block
+        ]
+    dexOpts = Dex.EvalConfig Dex.LLVM dexLibraryPath dexPreludePath Nothing
+    dexLibraryPath = Nothing
+    dexPreludePath = Nothing
 
 -- | add site meta data to a JSON object
 withSiteMeta :: Config Identity -> A.Value -> A.Value
@@ -617,11 +638,11 @@ buildIndex :: Config Identity -> Action ()
 buildIndex config = cacheAction ("build" :: T.Text, indexSrcPath) $ do
   indexContent <- readFile' indexSrcPath
   indexData <- markdownToHTML . T.pack $ indexContent
-  indexTemplate <- compileTemplate' "site/templates/index.html"
+  indexTemplate <- Slick.compileTemplate' "site/templates/index.html"
   gitHash <- getGitHash indexSrcPath >>= prettyGitHash config
   let withGitHash = A._Object . at "gitHash" ?~ A.String (T.pack gitHash)
       fullIndexData = withSiteMeta config . withGitHash $ indexData
-      indexHTML = T.unpack $ substitute indexTemplate fullIndexData
+      indexHTML = T.unpack $ Slick.substitute indexTemplate fullIndexData
   writeFile' (runIdentity (outputFolder config) </> "index.html") indexHTML
   where
     indexSrcPath :: FilePath
@@ -630,7 +651,7 @@ buildIndex config = cacheAction ("build" :: T.Text, indexSrcPath) $ do
 -- | find and build all blog posts
 buildBlogPostList :: Config Identity -> Action [Article 'BlogPostKind]
 buildBlogPostList config = do
-  blogPostPaths <- getDirectoryFiles "." ["site/posts//*.md", "site/posts//*.lhs"]
+  blogPostPaths <- getDirectoryFiles "." ["site/posts//*.md", "site/posts//*.lhs", "site/posts//*.dex"]
   blogPosts <- forP blogPostPaths (buildBlogPost config)
   let blogPosts' = assignAdjacentArticles . sortOn (Down . parseDate . bpDate) $ blogPosts
   _ <- forP blogPosts' (writeBlogPost config)
@@ -639,9 +660,9 @@ buildBlogPostList config = do
 -- | build blog posts page
 buildBlogPosts :: Config Identity -> [Article 'BlogPostKind] -> Action ()
 buildBlogPosts config articles = do
-  blogPostsTemplate <- compileTemplate' "site/templates/posts.html"
+  blogPostsTemplate <- Slick.compileTemplate' "site/templates/posts.html"
   let blogPostsInfo = ArticlesInfo {articles}
-      blogPostsHTML = T.unpack $ substitute blogPostsTemplate (withSiteMeta config $ A.toJSON blogPostsInfo)
+      blogPostsHTML = T.unpack $ Slick.substitute blogPostsTemplate (withSiteMeta config $ A.toJSON blogPostsInfo)
   writeFile' (runIdentity (outputFolder config) </> "posts.html") blogPostsHTML
 
 -- | build a single blog post
@@ -651,7 +672,8 @@ buildBlogPost config postSrcPath = cacheAction ("build" :: T.Text, postSrcPath) 
   postData <- case takeExtension postSrcPath of
     ".md" -> markdownToHTML . T.pack $ postContent
     ".lhs" -> codeToHTML . T.pack $ postContent
-    _ -> fail "Expected .md or .lhs"
+    ".dex" -> dexToHTML . T.pack $ postContent
+    _ -> fail "Expected .md, .lhs, or .dex"
   gitHash <- getGitHash postSrcPath >>= prettyGitHash config
   let postUrl = T.pack . dropDirectory1 $ postSrcPath -<.> "html"
       withPostUrl = A._Object . at "url" ?~ A.String postUrl
@@ -659,14 +681,14 @@ buildBlogPost config postSrcPath = cacheAction ("build" :: T.Text, postSrcPath) 
       withReadTime = A._Object . at "readTime" ?~ A.Integer (calcReadTime content)
       withGitHash = A._Object . at "gitHash" ?~ A.String (T.pack gitHash)
       fullPostData = withReadTime . withGitHash . withPostUrl $ postData
-  convert fullPostData
+  Slick.convert fullPostData
 
 -- | write blog post to file
 writeBlogPost :: Config Identity -> Article 'BlogPostKind -> Action ()
 writeBlogPost config post@BlogPost {..} = do
-  postTemplate <- compileTemplate' "site/templates/post.html"
+  postTemplate <- Slick.compileTemplate' "site/templates/post.html"
   writeFile' (runIdentity (outputFolder config) </> bpUrl) . T.unpack
-    . substitute postTemplate
+    . Slick.substitute postTemplate
     . withSiteMeta config
     . A.toJSON
     $ post
@@ -683,9 +705,9 @@ buildPublicationList config = do
 -- | build publications page
 buildPublications :: Config Identity -> [Article 'PublicationKind] -> Action ()
 buildPublications config articles = do
-  publicationsTemplate <- compileTemplate' "site/templates/publications.html"
+  publicationsTemplate <- Slick.compileTemplate' "site/templates/publications.html"
   let publicationsInfo = ArticlesInfo {articles}
-      publicationsHTML = T.unpack $ substitute publicationsTemplate (withSiteMeta config $ A.toJSON publicationsInfo)
+      publicationsHTML = T.unpack $ Slick.substitute publicationsTemplate (withSiteMeta config $ A.toJSON publicationsInfo)
   writeFile' (runIdentity (outputFolder config) </> "publications.html") publicationsHTML
 
 -- | build a single publication
@@ -698,14 +720,14 @@ buildPublication config publicationSrcPath = cacheAction ("build" :: T.Text, pub
       withPublicationUrl = A._Object . at "url" ?~ A.String publicationUrl
       withGitHash = A._Object . at "gitHash" ?~ A.String (T.pack gitHash)
       fullPublicationData = withPublicationUrl . withGitHash $ publicationData
-  convert fullPublicationData
+  Slick.convert fullPublicationData
 
 -- | write publication to file
 writePublication :: Config Identity -> Article 'PublicationKind -> Action ()
 writePublication config publication@Publication {..} = do
-  publicationTemplate <- compileTemplate' "site/templates/publication.html"
+  publicationTemplate <- Slick.compileTemplate' "site/templates/publication.html"
   writeFile' (runIdentity (outputFolder config) </> pubUrl) . T.unpack
-    . substitute publicationTemplate
+    . Slick.substitute publicationTemplate
     . withSiteMeta config
     . A.toJSON
     $ publication
@@ -732,20 +754,20 @@ buildTagList config articles =
 -- | build tags page
 buildTags :: Config Identity -> [Tag] -> Action ()
 buildTags config tags = do
-  tagsTemplate <- compileTemplate' "site/templates/tags.html"
+  tagsTemplate <- Slick.compileTemplate' "site/templates/tags.html"
   let tagsInfo = TagsInfo {tags}
-      tagsHTML = T.unpack $ substitute tagsTemplate (withSiteMeta config $ A.toJSON tagsInfo)
+      tagsHTML = T.unpack $ Slick.substitute tagsTemplate (withSiteMeta config $ A.toJSON tagsInfo)
   writeFile' (runIdentity (outputFolder config) </> "tags.html") tagsHTML
 
 -- | build a single tag page
 buildTag :: Config Identity -> Tag -> Action Tag
 buildTag config tag@Tag {..} =
   do
-    tagTemplate <- compileTemplate' "site/templates/tag.html"
+    tagTemplate <- Slick.compileTemplate' "site/templates/tag.html"
     let tagData = withSiteMeta config $ A.toJSON tag
-        tagHTML = T.unpack $ substitute tagTemplate tagData
+        tagHTML = T.unpack $ Slick.substitute tagTemplate tagData
     writeFile' (runIdentity (outputFolder config) </> url) tagHTML
-    convert tagData
+    Slick.convert tagData
 
 -- | calculate read time of a post based on the number of words
 -- and the average reading speed of around 200 words per minute
@@ -759,11 +781,11 @@ buildContact :: Config Identity -> Action ()
 buildContact config = cacheAction ("build" :: T.Text, contactSrcPath) $ do
   contactContent <- readFile' contactSrcPath
   contactData <- codeToHTML . T.pack $ contactContent
-  contactTemplate <- compileTemplate' "site/templates/contact.html"
+  contactTemplate <- Slick.compileTemplate' "site/templates/contact.html"
   gitHash <- getGitHash contactSrcPath >>= prettyGitHash config
   let withGitHash = A._Object . at "gitHash" ?~ A.String (T.pack gitHash)
       fullContactData = withSiteMeta config . withGitHash $ contactData
-      contactHTML = T.unpack $ substitute contactTemplate fullContactData
+      contactHTML = T.unpack $ Slick.substitute contactTemplate fullContactData
   writeFile' (runIdentity (outputFolder config) </> "contact.html") contactHTML
   where
     contactSrcPath :: FilePath
@@ -773,7 +795,7 @@ buildContact config = cacheAction ("build" :: T.Text, contactSrcPath) $ do
 buildResume :: Config Identity -> Action ()
 buildResume config = cacheAction ("build" :: T.Text, resumeSrcPath) $ do
   resumeJson <- readFile' resumeSrcPath
-  resumeTemplate <- compileTemplate' "site/templates/resume.html"
+  resumeTemplate <- Slick.compileTemplate' "site/templates/resume.html"
   gitHash <- getGitHash resumeSrcPath >>= prettyGitHash config
   let resumeData =
         fromMaybe "{}" $
@@ -790,7 +812,7 @@ buildResume config = cacheAction ("build" :: T.Text, resumeSrcPath) $ do
           go x = Just x
   let withGitHash = A._Object . at "gitHash" ?~ A.String (T.pack gitHash)
       fullResumeData = withSiteMeta config . withGitHash $ resumeData
-      resumeHTML = T.unpack $ substitute resumeTemplate fullResumeData
+      resumeHTML = T.unpack $ Slick.substitute resumeTemplate fullResumeData
   writeFile' (runIdentity (outputFolder config) </> "resume.html") resumeHTML
   where
     resumeSrcPath :: FilePath
@@ -834,8 +856,8 @@ buildFeed config articles = do
             currentTime = toIsoDate now,
             atomUrl = "/feed.xml"
           }
-  feedTemplate <- compileTemplate' "site/templates/feed.xml"
-  writeFile' (runIdentity (outputFolder config) </> "feed.xml") . T.unpack $ substitute feedTemplate (A.toJSON feedData)
+  feedTemplate <- Slick.compileTemplate' "site/templates/feed.xml"
+  writeFile' (runIdentity (outputFolder config) </> "feed.xml") . T.unpack $ Slick.substitute feedTemplate (A.toJSON feedData)
   where
     toFeedPost :: forall kind. Article kind -> SomeArticle
     toFeedPost p@BlogPost {..} = SomeArticle $ p {bpDate = formatDate bpDate}

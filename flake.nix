@@ -50,8 +50,8 @@
                 };
                 compiler-nix-name = "ghc8107";
                 shell.tools = {
-                  cabal = {};
-                  haskell-language-server = {};
+                  cabal = { };
+                  haskell-language-server = { };
                 };
                 shell.buildInputs = with pkgs; [
                   nodePackages.serve
@@ -85,7 +85,7 @@
                     #   "--with-ld=${final.clang_12}/bin/ld"
                     # ];
                     packages.dex.src =
-                      final.runCommand "build-dexrt" {} ''
+                      final.runCommand "build-dexrt" { } ''
                         mkdir -p $out
                         cp -r ${inputs.dex-lang.outPath}/* $out
                         chmod u+w $out/src/lib
@@ -107,8 +107,9 @@
           })
         ];
         pkgs = import nixpkgs { inherit system overlays; inherit (haskell-nix) config; };
-        flake = pkgs.websiteProject.flake {};
-      in flake // rec {
+        flake = pkgs.websiteProject.flake { };
+      in
+      flake // rec {
         defaultPackage = flake.packages."website:exe:website";
         apps.website = utils.lib.mkApp {
           drv = defaultPackage;
@@ -119,8 +120,8 @@
           {
             checksss = builtins.attrValues flake.checks.${system};
           } ''
-            echo $checksss
-            touch $out
-          '';
+          echo $checksss
+          touch $out
+        '';
       });
 }
