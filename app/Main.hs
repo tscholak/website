@@ -651,7 +651,7 @@ buildIndex config = cacheAction ("build" :: T.Text, indexSrcPath) $ do
 -- | find and build all blog posts
 buildBlogPostList :: Config Identity -> Action [Article 'BlogPostKind]
 buildBlogPostList config = do
-  blogPostPaths <- getDirectoryFiles "." ["site/posts//*.md", "site/posts//*.lhs", "site/posts//*.dex"]
+  blogPostPaths <- getDirectoryFiles "." ["site/posts//*.md", "site/posts//*.lhs", "site/posts//*.dx"]
   blogPosts <- forP blogPostPaths (buildBlogPost config)
   let blogPosts' = assignAdjacentArticles . sortOn (Down . parseDate . bpDate) $ blogPosts
   _ <- forP blogPosts' (writeBlogPost config)
@@ -672,8 +672,8 @@ buildBlogPost config postSrcPath = cacheAction ("build" :: T.Text, postSrcPath) 
   postData <- case takeExtension postSrcPath of
     ".md" -> markdownToHTML . T.pack $ postContent
     ".lhs" -> codeToHTML . T.pack $ postContent
-    ".dex" -> dexToHTML . T.pack $ postContent
-    _ -> fail "Expected .md, .lhs, or .dex"
+    ".dx" -> dexToHTML . T.pack $ postContent
+    _ -> fail "Expected .md, .lhs, or .dx"
   gitHash <- getGitHash postSrcPath >>= prettyGitHash config
   let postUrl = T.pack . dropDirectory1 $ postSrcPath -<.> "html"
       withPostUrl = A._Object . at "url" ?~ A.String postUrl
