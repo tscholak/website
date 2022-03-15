@@ -16,11 +16,11 @@ import Data.Map.Lazy (Map)
 import qualified Data.Map.Lazy as Map
 import qualified Data.Text as T
 import qualified Data.Yaml as Yaml
+import Debug.Trace (trace, traceShowId)
 import qualified Err as Dex
 import Network.URI.JSON ()
 import qualified PPrint as Dex ()
-import qualified Parser as Dex
-import qualified Syntax as Dex (Output (BenchResult, EvalTime, HtmlOut, MiscLog, PassInfo, TextOut, TotalTime), Result (Result), SourceBlock (sbContents), SourceBlock' (..))
+import qualified Syntax as Dex (Output (HtmlOut, TextOut), Result (Result), SourceBlock (sbContents), SourceBlock' (..))
 import qualified Text.Pandoc as Pandoc
 import qualified Text.Pandoc.Builder as Pandoc
 import qualified Text.Pandoc.Parsing as Pandoc
@@ -64,9 +64,9 @@ parseDex = do
       doc =
         Pandoc.runF
           ( do
-              Pandoc.Pandoc _ bs <- Pandoc.doc <$> blocks
+              Pandoc.Pandoc meta' bs <- Pandoc.doc <$> blocks
               meta <- Pandoc.stateMeta' parserState
-              return $ Pandoc.Pandoc meta bs
+              trace ("[parseDex] " <> show meta') $ return $ Pandoc.Pandoc meta bs
           )
           parserState
   Pandoc.reportLogMessages
@@ -77,8 +77,9 @@ yamlMetaBlock' ::
   PandocParser ParserStateWithDexEnv m (Pandoc.Future Pandoc.ParserState Pandoc.Blocks)
 yamlMetaBlock' = do
   Pandoc.guardEnabled Pandoc.Ext_yaml_metadata_block
-  newMetaF <- yamlMetaBlock (fmap Pandoc.toMetaValue <$> parseDexBlocks)
-  -- Since `<>` is left-biased, existing values are not touched:
+  newMetaF <- trace "[newMetaF]" yamlMetaBlock
+  let msg = Pandoc.tshow $ Pandoc.runF newMetaF Pandoc.defaultParserState
+  trace ("[yamlMetaBlock'] " <> T.unpack msg) $ return ()
   Pandoc.updateState $ \(st :: ParserStateWithDexEnv) ->
     let parserState = _parserState st
      in st {_parserState = parserState {Pandoc.stateMeta' = Pandoc.stateMeta' parserState <> newMetaF}}
@@ -86,9 +87,8 @@ yamlMetaBlock' = do
 
 yamlMetaBlock ::
   Pandoc.PandocMonad m =>
-  PandocParser ParserStateWithDexEnv m (Pandoc.Future Pandoc.ParserState Pandoc.MetaValue) ->
   PandocParser ParserStateWithDexEnv m (Pandoc.Future Pandoc.ParserState Pandoc.Meta)
-yamlMetaBlock parser = Pandoc.try $ do
+yamlMetaBlock = Pandoc.try $ do
   _ <- dexComment $ do
     _ <- Pandoc.string "---"
     _ <- Pandoc.blankline
@@ -97,7 +97,7 @@ yamlMetaBlock parser = Pandoc.try $ do
   -- by including --- and ..., we allow yaml blocks with just comments:
   let rawYaml = T.unlines ("---" : (rawYamlLines ++ ["..."]))
   _ <- optional Pandoc.blanklines
-  yamlBsToMeta parser $ Pandoc.fromText rawYaml
+  yamlBsToMeta $ Pandoc.fromText rawYaml
 
 dexComment ::
   Pandoc.PandocMonad m =>
@@ -113,12 +113,11 @@ stopLine = Pandoc.try $ (Pandoc.string "---" <|> Pandoc.string "...") >> Pandoc.
 
 yamlBsToMeta ::
   Pandoc.PandocMonad m =>
-  PandocParser ParserStateWithDexEnv m (Pandoc.Future Pandoc.ParserState Pandoc.MetaValue) ->
   BS.ByteString ->
   PandocParser ParserStateWithDexEnv m (Pandoc.Future Pandoc.ParserState Pandoc.Meta)
-yamlBsToMeta pMetaValue bstr = do
+yamlBsToMeta bstr =
   case Yaml.decodeAllEither' bstr of
-    Right (A.Object o : _) -> fmap Pandoc.Meta <$> yamlMap pMetaValue o
+    Right (A.Object o : _) -> fmap Pandoc.Meta <$> yamlMap o
     Right [] -> return . return $ mempty
     Right [A.Null] -> return . return $ mempty
     Right _ -> Prelude.fail "expected YAML object"
@@ -129,10 +128,9 @@ yamlBsToMeta pMetaValue bstr = do
 
 yamlMap ::
   Pandoc.PandocMonad m =>
-  PandocParser ParserStateWithDexEnv m (Pandoc.Future Pandoc.ParserState Pandoc.MetaValue) ->
   A.Object ->
   PandocParser ParserStateWithDexEnv m (Pandoc.Future Pandoc.ParserState (Map T.Text Pandoc.MetaValue))
-yamlMap pMetaValue o = do
+yamlMap o = do
   case A.fromJSON (A.Object o) of
     A.Error err' -> throwError $ Pandoc.PandocParseError $ T.pack err'
     A.Success (m' :: Map T.Text A.Value) -> do
@@ -141,20 +139,19 @@ yamlMap pMetaValue o = do
   where
     ignorable t = "_" `T.isSuffixOf` t
     toMeta (k, v) = do
-      fv <- yamlToMetaValue pMetaValue v
+      fv <- yamlToMetaValue v
       return $ do
         v' <- fv
         return (k, v')
 
 yamlToMetaValue ::
   Pandoc.PandocMonad m =>
-  PandocParser ParserStateWithDexEnv m (Pandoc.Future Pandoc.ParserState Pandoc.MetaValue) ->
   A.Value ->
   PandocParser ParserStateWithDexEnv m (Pandoc.Future Pandoc.ParserState Pandoc.MetaValue)
-yamlToMetaValue pMetaValue v =
+yamlToMetaValue v =
   case v of
     A.String t -> normalize t
-    A.Bool b -> return $ return $ Pandoc.MetaBool b
+    A.Bool b -> return . return $ Pandoc.MetaBool b
     A.Number d -> normalize $
       case A.fromJSON v of
         A.Success (i :: Int) -> Pandoc.tshow i
@@ -165,37 +162,26 @@ yamlToMetaValue pMetaValue v =
         A.Error err' -> throwError $ Pandoc.PandocParseError $ T.pack err'
         A.Success vs ->
           fmap Pandoc.MetaList . sequence
-            <$> mapM (yamlToMetaValue pMetaValue) vs
-    A.Object o -> fmap Pandoc.MetaMap <$> yamlMap pMetaValue o
+            <$> mapM yamlToMetaValue vs
+    A.Object o -> fmap Pandoc.MetaMap <$> yamlMap o
   where
-    normalize t =
-      -- Note: a standard quoted or unquoted YAML value will
-      -- not end in a newline, but a "block" set off with
-      -- `|` or `>` will.
-      if "\n" `T.isSuffixOf` T.dropWhileEnd isSpaceChar t -- see #6823
-        then Pandoc.parseFromString' pMetaValue (t <> "\n")
-        else Pandoc.parseFromString' asInlines t
-    asInlines = fmap b2i <$> pMetaValue
-    b2i (Pandoc.MetaBlocks [Pandoc.Plain ils]) = Pandoc.MetaInlines ils
-    b2i (Pandoc.MetaBlocks [Pandoc.Para ils]) = Pandoc.MetaInlines ils
-    b2i bs = bs
-    isSpaceChar ' ' = True
-    isSpaceChar '\t' = True
-    isSpaceChar _ = False
+    normalize t = return . return $ Pandoc.MetaString t
 
 parseDexBlocks ::
   (MonadIO m, MonadReader Dex.EvalConfig m, Pandoc.PandocMonad m) =>
   PandocParser ParserStateWithDexEnv m (Pandoc.Future Pandoc.ParserState Pandoc.Blocks)
 parseDexBlocks = do
-  ret <- evalDexBlock Dex.preludeImportBlock
-  mconcat . (:) ret <$> Pandoc.manyTill block Pandoc.eof
+  mconcat <$> Pandoc.manyTill block Pandoc.eof
   where
-    block =
-      Pandoc.choice
-        [ mempty <$ Pandoc.blanklines,
-          yamlMetaBlock',
-          dexBlock
-        ]
+    block = do
+      res <-
+        Pandoc.choice
+          [ mempty <$ Pandoc.blanklines,
+            yamlMetaBlock',
+            dexBlock
+          ]
+      let msg = Pandoc.tshow $ Pandoc.toList $ Pandoc.runF res Pandoc.defaultParserState
+      trace ("[parseDexBlocks] " <> T.unpack msg) $ return res
 
 instance Pandoc.HasReaderOptions ParserStateWithDexEnv where
   extractReaderOptions = Pandoc.extractReaderOptions . _parserState
@@ -212,23 +198,15 @@ dexBlock ::
   (MonadIO m, MonadReader Dex.EvalConfig m, Pandoc.PandocMonad m) =>
   PandocParser ParserStateWithDexEnv m (Pandoc.Future Pandoc.ParserState Pandoc.Blocks)
 dexBlock = Pandoc.try $ do
-  rawDex <- Pandoc.many Pandoc.anyLine
-  let dexSource = T.unlines rawDex
-  case Dex.parseTopDeclRepl $ T.unpack dexSource of
-    Just sourceBlock -> evalDexBlock sourceBlock
-    Nothing -> fail "invalid dex block"
-
-evalDexBlock ::
-  (MonadIO m, MonadReader Dex.EvalConfig m, Pandoc.PandocMonad m) =>
-  Dex.SourceBlock ->
-  PandocParser ParserStateWithDexEnv m (Pandoc.Future Pandoc.ParserState Pandoc.Blocks)
-evalDexBlock sourceBlock = do
+  raw <- Pandoc.many1 Pandoc.anyLine
+  let dexLines = T.unlines raw
+  trace ("[dexBlock] " <> T.unpack dexLines) $ return ()
   st <- Pandoc.getState
   opts <- ask
-  (result, dexEnv) <- liftIO $ Dex.evalSourceBlockIO opts (_dexEnv st) sourceBlock
+  (r, dexEnv) <- liftIO $ Dex.runTopperM opts (_dexEnv st) $ Dex.evalSourceText $ T.unpack dexLines
   Pandoc.updateState (\st' -> st' {_dexEnv = dexEnv})
-  blocks <- toPandocBlocks sourceBlock <> toPandocBlocks result
-  return . return $ blocks
+  blocks <- traverse (\(sourceBlock, result) -> toPandocBlocks sourceBlock <> toPandocBlocks result) r
+  return . return $ mconcat blocks
 
 class ToPandocBlocks a where
   toPandocBlocks :: Pandoc.PandocMonad m => a -> m Pandoc.Blocks
@@ -257,7 +235,7 @@ instance ToPandocBlocks Dex.Output where
     -- Dex.TotalTime x -> undefined
     -- Dex.BenchResult s x y ma -> undefined
     -- Dex.MiscLog s -> undefined
-    _ -> pure $ Pandoc.codeBlock . T.pack $ Dex.pprint out
+    _ -> pure $ Pandoc.codeBlock . T.pack $ traceShowId $ Dex.pprint out
 
 instance ToPandocBlocks Dex.SourceBlock where
   toPandocBlocks sourceBlock = case Dex.sbContents sourceBlock of

@@ -1,14 +1,18 @@
 -- ---
 -- title: "Hello Dex"
--- date: Marc 10, 2022
+-- date: Mar 10, 2022
 -- teaser: >
 --   Say hello to Dex and see how Dex greets you.
 -- tags:
 --   items: [dex]
 -- ---
 
+' Two static type definitions to begin with:
+
 Height = Fin 3
 Width = Fin 8
+
+' Let's make a rectangular array:
 
 x = for i:Height. for j:Width. 1.0
 
@@ -17,9 +21,11 @@ x = for i:Height. for j:Width. 1.0
 :t x
 > ((Fin 3) => (Fin 8) => Float32)
 
-' We can print it, too:
+' We can print `x`, too:
 
 x
 > [ [1., 1., 1., 1., 1., 1., 1., 1.]
 > , [1., 1., 1., 1., 1., 1., 1., 1.]
 > , [1., 1., 1., 1., 1., 1., 1., 1.] ]
+
+' That's all folks!
