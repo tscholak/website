@@ -54,13 +54,18 @@ common shared-properties
     , transformers
     , unordered-containers
     , vector
+    , llvm-hs
+    , llvm-hs-pure
+    , dex
+    , yaml
   ghc-options: -W -Wall -O2 -threaded -rtsopts -with-rtsopts=-N
 
 executable website
   import: shared-properties
   main-is: Main.hs
   other-modules:
-      Contact
+      Text.Pandoc.Readers.Dex
+    , Contact
     , Unrecurse
     , Flattening
   hs-source-dirs:

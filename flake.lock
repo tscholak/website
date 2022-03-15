@@ -83,6 +83,39 @@
         "type": "github"
       }
     },
+    "dex-lang": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1646700362,
+        "narHash": "sha256-QNk3TCopRKSlX9bnhGx2IhNRL3YZKWf2Y53Fwz80678=",
+        "owner": "tscholak",
+        "repo": "dex-lang",
+        "rev": "920ca8ff00956a17e04185cb5e8b61788fcb241b",
+        "type": "github"
+      },
+      "original": {
+        "owner": "tscholak",
+        "ref": "920ca8ff00956a17e04185cb5e8b61788fcb241b",
+        "repo": "dex-lang",
+        "type": "github"
+      }
+    },
+    "flake-compat": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1641205782,
+        "narHash": "sha256-4jY7RCWUoZ9cKD8co0/4tFARpWB+57+r1bLLvXNJliY=",
+        "owner": "edolstra",
+        "repo": "flake-compat",
+        "rev": "b7547d3eed6f32d06102ead8991ec52ab0a4f1a7",
+        "type": "github"
+      },
+      "original": {
+        "owner": "edolstra",
+        "repo": "flake-compat",
+        "type": "github"
+      }
+    },
     "flake-utils": {
       "locked": {
         "lastModified": 1644229661,
@@ -154,11 +187,11 @@
         "stackage": "stackage"
       },
       "locked": {
-        "lastModified": 1645838106,
-        "narHash": "sha256-zyJJDpQ26yHOyWiaZrEVy9j/8p3TLsjo1c8v55M6nrA=",
+        "lastModified": 1646739130,
+        "narHash": "sha256-6uP5OaRn0HP790fq37dRGb/uQwEwVJihr9nWEyNS9lw=",
         "owner": "input-output-hk",
         "repo": "haskell.nix",
-        "rev": "59974fd04a437507cc0cc52dfaa34f31761ffebe",
+        "rev": "95b3617b2af0a04c04f16e4b88df291587f6a418",
         "type": "github"
       },
       "original": {
@@ -180,6 +213,23 @@
       "original": {
         "owner": "sevanspowell",
         "repo": "hpc-coveralls",
+        "type": "github"
+      }
+    },
+    "llvm-hs": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1644009200,
+        "narHash": "sha256-IG4Mh89bY+PtBJtzlXKYsPljfHP7OSQk03pV6fSmdRY=",
+        "owner": "llvm-hs",
+        "repo": "llvm-hs",
+        "rev": "eda85a2bbe362a0b89df5adce0cb65e4e755eac5",
+        "type": "github"
+      },
+      "original": {
+        "owner": "llvm-hs",
+        "ref": "llvm-12",
+        "repo": "llvm-hs",
         "type": "github"
       }
     },
@@ -282,15 +332,36 @@
     },
     "root": {
       "inputs": {
+        "dex-lang": "dex-lang",
+        "flake-compat": "flake-compat",
         "haskell-nix": "haskell-nix",
+        "llvm-hs": "llvm-hs",
         "nixpkgs": [
           "haskell-nix",
           "nixpkgs-unstable"
         ],
+        "slick": "slick",
         "utils": [
           "haskell-nix",
           "flake-utils"
         ]
+      }
+    },
+    "slick": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1645114125,
+        "narHash": "sha256-ENPnfyFI2/LLXJP5cQ6sb2tIQ/6PKfB61XMYF7W8Qm4=",
+        "owner": "ChrisPenner",
+        "repo": "slick",
+        "rev": "51d4849e8fe3dad93ef8c10707975068f797fd28",
+        "type": "github"
+      },
+      "original": {
+        "owner": "ChrisPenner",
+        "ref": "51d4849e8fe3dad93ef8c10707975068f797fd28",
+        "repo": "slick",
+        "type": "github"
       }
     },
     "stackage": {
