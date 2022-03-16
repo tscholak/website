@@ -220,11 +220,11 @@ instance ToPandocBlocks Dex.Result where
 instance ToPandocBlocks (Dex.Except ()) where
   toPandocBlocks err = case err of
     Dex.Failure er -> pure $ Pandoc.codeBlock . T.pack $ Dex.pprint er
-    Dex.Success _x0 -> pure mempty
+    Dex.Success () -> pure mempty
 
 instance ToPandocBlocks Dex.Output where
   toPandocBlocks out = case out of
-    Dex.TextOut s -> pure $ Pandoc.plain . Pandoc.str . T.pack $ s
+    Dex.TextOut s -> pure $ Pandoc.blockQuote . Pandoc.codeBlock . T.pack $ s
     Dex.HtmlOut s -> do
       Pandoc.Pandoc meta blocks <- Pandoc.readHtml Pandoc.def . T.pack $ s
       if null . Pandoc.unMeta $ meta

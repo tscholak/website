@@ -126,6 +126,15 @@ blockquote>p::before {
   content: "> ";
 }
 
+blockquote>pre {
+  padding-left: 0ch;
+  text-indent: -2ch;
+}
+
+blockquote>pre>code::before {
+  content: "> ";
+}
+
 blockquote>ul {
   list-style-type: "> * ";
   padding-left: 4ch;
@@ -154,7 +163,7 @@ code {
   font-family: "PragmataPro", monospace;
 }
 
-pre > code {
+pre>code {
   font-weight: normal;
 }
 
