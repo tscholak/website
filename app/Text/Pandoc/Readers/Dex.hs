@@ -10,14 +10,11 @@ import Control.Monad.Reader (MonadReader (ask), ReaderT (runReaderT))
 import Data.Foldable (Foldable (fold))
 import qualified Data.Text as T
 import qualified Err as Dex
-import Network.URI.JSON ()
-import qualified PPrint as Dex ()
 import qualified Syntax as Dex (Output (HtmlOut, TextOut), Result (Result), SourceBlock (sbContents), SourceBlock' (..))
 import qualified Text.Pandoc as Pandoc
 import qualified Text.Pandoc.Builder as Pandoc
 import qualified Text.Pandoc.Parsing as Pandoc
 import qualified TopLevel as Dex
-import Debug.Trace
 
 readDex ::
   (MonadIO m, Pandoc.PandocMonad m, Pandoc.ToSources a) =>
@@ -65,8 +62,8 @@ instance ToPandoc Dex.Output where
       pure
         . Pandoc.Pandoc mempty
         . Pandoc.toList
-        . Pandoc.plain
-        . Pandoc.str
+        . Pandoc.blockQuote
+        . Pandoc.codeBlock
         . T.pack
         $ s
     Dex.HtmlOut s -> do
@@ -95,8 +92,7 @@ instance ToPandoc Dex.SourceBlock where
     -- Dex.QueryEnv eq -> undefined
     Dex.ProseBlock s -> do
       pandocOpts <- ask
-      p <- Pandoc.readCommonMark pandocOpts . T.pack $ traceShowId s
-      pure $ traceShowId p
+      Pandoc.readCommonMark pandocOpts . T.pack $ s
     -- Dex.CommentLine -> undefined
     Dex.EmptyLines -> pure mempty
     -- Dex.UnParseable b s -> undefined
