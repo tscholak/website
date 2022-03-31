@@ -31,7 +31,7 @@
       flake = false;
     };
     dex-lang = {
-      url = "github:tscholak/dex-lang?ref=920ca8ff00956a17e04185cb5e8b61788fcb241b";
+      url = "github:google-research/dex-lang?ref=a80b2b0c53356817ea1252be546a9f560d4d9d9f";
       flake = false;
     };
   };
