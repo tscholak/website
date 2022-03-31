@@ -10,7 +10,12 @@ import Control.Monad.Reader (MonadReader (ask), ReaderT (runReaderT))
 import Data.Foldable (Foldable (fold))
 import qualified Data.Text as T
 import qualified Err as Dex
-import qualified Syntax as Dex (Output (HtmlOut, TextOut), Result (Result), SourceBlock (sbContents), SourceBlock' (..))
+import qualified Syntax as Dex
+  ( Output (HtmlOut, TextOut),
+    Result (Result),
+    SourceBlock (sbContents),
+    SourceBlock' (..),
+  )
 import qualified Text.Pandoc as Pandoc
 import qualified Text.Pandoc.Builder as Pandoc
 import qualified Text.Pandoc.Parsing as Pandoc
@@ -24,20 +29,28 @@ readDex ::
   m Pandoc.Pandoc
 readDex pandocOpts dexOpts s = flip runReaderT pandocOpts $ do
   dexEnv <- liftIO Dex.loadCache
-  let source :: String = T.unpack . Pandoc.sourcesToText . Pandoc.toSources $ s
-  (results, dexEnv') <- liftIO $ Dex.runTopperM dexOpts dexEnv $ Dex.evalSourceText source
+  let source = T.unpack . Pandoc.sourcesToText . Pandoc.toSources $ s
+  (results, dexEnv') <-
+    liftIO $
+      Dex.runTopperM dexOpts dexEnv $
+        Dex.evalSourceText
+          source
   Dex.storeCache dexEnv'
-  fold
-    <$> traverse
-      ( \(sourceBlock, result) -> do
-          Pandoc.Pandoc meta blocks <- toPandoc sourceBlock
-          Pandoc.Pandoc meta' blocks' <- toPandoc result
-          return $ Pandoc.Pandoc (meta <> meta') (blocks <> blocks')
-      )
-      results
+  fold <$> traverse toPandoc results
 
 class ToPandoc a where
-  toPandoc :: (MonadReader Pandoc.ReaderOptions m, Pandoc.PandocMonad m) => a -> m Pandoc.Pandoc
+  toPandoc ::
+    ( MonadReader Pandoc.ReaderOptions m,
+      Pandoc.PandocMonad m
+    ) =>
+    a ->
+    m Pandoc.Pandoc
+
+instance (ToPandoc a, ToPandoc b) => ToPandoc (a, b) where
+  toPandoc (a, b) = do
+    Pandoc.Pandoc meta blocks <- toPandoc a
+    Pandoc.Pandoc meta' blocks' <- toPandoc b
+    return $ Pandoc.Pandoc (meta <> meta') (blocks <> blocks')
 
 instance ToPandoc Dex.Result where
   toPandoc (Dex.Result outs err) = do
@@ -100,6 +113,6 @@ instance ToPandoc Dex.SourceBlock where
       pure
         . Pandoc.Pandoc mempty
         . Pandoc.toList
-        . Pandoc.codeBlock
+        . Pandoc.codeBlockWith ("", ["dex"], [])
         . T.pack
         $ Dex.pprint sourceBlock
