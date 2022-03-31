@@ -7,6 +7,8 @@ tags:
   items: [dex]
 ---
 
+' This article is a small demonstration of [Text.Pandoc.Readers.Dex](https://github.com/tscholak/website/blob/main/app/Text/Pandoc/Readers/Dex.hs).
+
 ' First, two static type definitions:
 
 Height = Fin 3
