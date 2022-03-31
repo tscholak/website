@@ -17,6 +17,7 @@ import qualified Text.Pandoc as Pandoc
 import qualified Text.Pandoc.Builder as Pandoc
 import qualified Text.Pandoc.Parsing as Pandoc
 import qualified TopLevel as Dex
+import Debug.Trace
 
 readDex ::
   (MonadIO m, Pandoc.PandocMonad m, Pandoc.ToSources a) =>
@@ -94,7 +95,8 @@ instance ToPandoc Dex.SourceBlock where
     -- Dex.QueryEnv eq -> undefined
     Dex.ProseBlock s -> do
       pandocOpts <- ask
-      Pandoc.readCommonMark pandocOpts . T.pack $ s
+      p <- Pandoc.readCommonMark pandocOpts . T.pack $ traceShowId s
+      pure $ traceShowId p
     -- Dex.CommentLine -> undefined
     Dex.EmptyLines -> pure mempty
     -- Dex.UnParseable b s -> undefined

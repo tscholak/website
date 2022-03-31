@@ -1,13 +1,13 @@
--- ---
--- title: "Hello Dex"
--- date: Mar 10, 2022
--- teaser: >
---   Say hello to Dex and see how Dex greets you.
--- tags:
---   items: [dex]
--- ---
+'---
+title: "Hello Dex"
+date: Mar 10, 2022
+teaser: >
+  Say hello to Dex and see how Dex greets you.
+tags:
+  items: [dex]
+---
 
-' Two static type definitions to begin with:
+' First, two static type definitions:
 
 Height = Fin 3
 Width = Fin 8
