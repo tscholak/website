@@ -1,0 +1,26 @@
+name: Tests
+
+on:
+  push:
+    branches:
+      - "main"
+  pull_request:
+    branches:
+      - "main"
+
+jobs:
+  tests:
+    name: "Tests"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: |
+          git log --pretty=format:"%h %ci %an %s" -n 1 -- site/
+      - uses: cachix/install-nix-action@v31
+      - uses: cachix/cachix-action@v10
+        with:
+          name: devenv
+      - run: nix profile add nixpkgs#devenv
+      - run: devenv shell devenv-generate-test

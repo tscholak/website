@@ -1,12 +1,19 @@
-name: "Build and deploy to GitHub Pages"
+name: Documentation
 
 on:
   push:
-    branches: ["main"]
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
 
 jobs:
   build:
-    name: "Build"
+    name: Build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,8 +25,7 @@ jobs:
       - uses: cachix/cachix-action@v10
         with:
           name: devenv
-      - run: nix profile install nixpkgs#devenv
-      - run: devenv test
+      - run: nix profile add nixpkgs#devenv
       - run: devenv shell devenv-generate-build
       - uses: actions/upload-artifact@v4
         with:
@@ -27,6 +33,7 @@ jobs:
           path: ./build
 
   deploy:
+    if: github.event_name == 'push'
     name: "Deploy"
     needs: build
     runs-on: ubuntu-latest

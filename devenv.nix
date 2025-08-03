@@ -1,4 +1,9 @@
-{ pkgs, lib, config, inputs, ... }:
+{ pkgs
+, lib
+, config
+, inputs
+, ...
+}:
 
 {
   # https://devenv.sh/packages/
@@ -24,6 +29,8 @@
 
   processes = {
     serve.exec = "npx serve build";
+  }
+  // lib.optionalAttrs (!config.devenv.isTesting) {
     build.exec = ''
       ${pkgs.watchexec}/bin/watchexec \
         --watch app \
