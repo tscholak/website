@@ -1,0 +1,16 @@
+resolver: lts-24.2
+
+allow-newer: false
+notify-if-nix-on-path: false
+recommend-stack-upgrade: false
+stack-developer-mode: true
+system-ghc: true
+
+nix:
+  enable: false
+
+ghc-options:
+  '$everything': -haddock
+
+packages:
+  - .
