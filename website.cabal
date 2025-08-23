@@ -1,18 +1,17 @@
-cabal-version:  2.4
-
-name:           website
-version:        0.1.0.0
-synopsis:       Torsten Scholak's website
-description:    Torsten Scholak's website
-category:       website
-homepage:       https://github.com/tscholak/website#readme
-bug-reports:    https://github.com/tscholak/website
-author:         Torsten Scholak
-maintainer:     torsten.scholak@googlemail.com
-copyright:      2021 Torsten Scholak
-license:        BSD-3-Clause
-license-file:   LICENSE
-build-type:     Custom
+cabal-version: 3.8
+name: website
+version: 0.2.0.0
+synopsis: Torsten Scholak's website
+description: Torsten Scholak's website
+category: website
+homepage: https://tscholak.github.io
+bug-reports: https://github.com/tscholak/website
+author: Torsten Scholak
+maintainer: torsten.scholak@googlemail.com
+copyright: 2025 Torsten Scholak
+license: BSD-3-Clause
+license-file: LICENSE
+build-type: Custom
 
 source-repository head
   type: git
@@ -20,58 +19,62 @@ source-repository head
 
 custom-setup
   setup-depends:
-      base
-    , Cabal
-    , cabal-doctest >= 1 && <1.1
+    Cabal,
+    base,
+    cabal-doctest >=1 && <1.1,
 
 common shared-properties
   default-language: Haskell2010
   build-depends:
-      aeson
-    , attoparsec
-    , base >=4.7 && <5
-    , barbies
-    , binary
-    , bytestring
-    , casing
-    , containers
-    , either
-    , lens
-    , lens-aeson
-    , mtl
-    , network-uri
-    , network-uri-json
-    , optparse-applicative
-    , recursion-schemes
-    , pandoc
-    , pandoc-types
-    , process
-    , shake
-    , slick
-    , split
-    , text
-    , time
-    , transformers
-    , unordered-containers
-    , vector
-    , llvm-hs
-    , llvm-hs-pure
-    , dex
-    , yaml
-  ghc-options: -W -Wall -O2 -threaded -rtsopts -with-rtsopts=-N
+    aeson,
+    attoparsec,
+    attoparsec-aeson,
+    barbies,
+    base >=4.7 && <5,
+    binary,
+    bytestring,
+    casing,
+    containers,
+    directory,
+    either,
+    filepath,
+    lens,
+    lens-aeson,
+    megaparsec,
+    mtl,
+    network-uri,
+    optparse-applicative,
+    pandoc,
+    process,
+    recursion-schemes,
+    shake,
+    slick,
+    text,
+    time,
+    vector,
+    yaml,
+
+  ghc-options:
+    -W
+    -Wall
+    -O2
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
 
 executable website
   import: shared-properties
   main-is: Main.hs
   other-modules:
-      Text.Pandoc.Readers.Dex
-    , Contact
-    , Unrecurse
-    , Flattening
+    Contact
+    Flattening
+    OutsourcedAI
+    Unrecurse
+
   hs-source-dirs:
-      app
-    , site
-    , site/posts
+    app
+    site
+    site/posts
 
 test-suite doctests
   import: shared-properties
@@ -81,6 +84,23 @@ test-suite doctests
   x-doctest-components: exe:website
   main-is: Doctests.hs
   build-depends:
-      doctest
-    , QuickCheck
-    , template-haskell
+    QuickCheck,
+    doctest,
+    template-haskell,
+
+test-suite tests
+  import: shared-properties
+  type: exitcode-stdio-1.0
+  hs-source-dirs:
+    tests
+    app
+
+  main-is: Spec.hs
+  other-modules:
+    Quantity
+    QuantitySpec
+
+  build-depends:
+    QuickCheck,
+    hspec,
+    hspec-discover,

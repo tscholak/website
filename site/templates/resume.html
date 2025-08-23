@@ -10,69 +10,39 @@
 
         <h1>Resume</h1>
         <p>Below is my resume. A PDF version is available upon request.</p>
-        {{#basics}}
-            {{>site/templates/resume/basics.html}}
-        {{/basics}}
-        {{#work}}
-            <h2>Work</h2>
-            {{#items}}
-                {{>site/templates/resume/organization.html}}
-            {{/items}}
-        {{/work}}
-        {{#volunteer}}
-            <h2>Volunteer</h2>
-            {{#items}}
-                {{>site/templates/resume/organization.html}}
-            {{/items}}
-        {{/volunteer}}
-        {{#education}}
+        
+        {{#cv}}
+            {{>site/templates/resume/cv-header.html}}
+            
+            {{>site/templates/resume/social.html}}
+            
+            {{#sections}}
+                {{#summary}}
+                <h2>Summary</h2>
+                <p>{{.}}</p>
+                {{/summary}}
+            {{/sections}}
+            
+            <h2>Experience</h2>
+            {{#sections.experience}}
+            {{>site/templates/resume/experience.html}}
+            {{/sections.experience}}
+            
             <h2>Education</h2>
-            {{#items}}
-                {{>site/templates/resume/education.html}}
-            {{/items}}
-        {{/education}}
-        {{#awards}}
-            <h2>Awards</h2>
-            {{#items}}
-                {{>site/templates/resume/award.html}}
-            {{/items}}
-        {{/awards}}
-        {{#publications}}
+            {{#sections.education}}
+            {{>site/templates/resume/education.html}}
+            {{/sections.education}}
+            
             <h2>Publications</h2>
-            {{#items}}
-                {{>site/templates/resume/publication.html}}
-            {{/items}}
-        {{/publications}}
-        {{#skills}}
-            <h2>Skills</h2>
-            {{#items}}
-                {{>site/templates/resume/skill.html}}
-            {{/items}}
-        {{/skills}}
-        {{#languages}}
-            <h2>Languages</h2>
-            {{#items}}
-                {{>site/templates/resume/language.html}}
-            {{/items}}
-        {{/languages}}
-        {{#interests}}
-            <h2>Interests</h2>
-            {{#items}}
-                {{>site/templates/resume/interest.html}}
-            {{/items}}
-        {{/interests}}
-        {{#references}}
-            <h2>References</h2>
-            {{#items}}
-                {{>site/templates/resume/reference.html}}
-            {{/items}}
-        {{/references}}
-        {{#projects}}
+            {{#sections.publications}}
+            {{>site/templates/resume/publication.html}}
+            {{/sections.publications}}
+            
             <h2>Projects</h2>
-            {{#items}}
-                {{>site/templates/resume/project.html}}
-            {{/items}}
-        {{/projects}}
+            {{#sections.projects}}
+            {{>site/templates/resume/project.html}}
+            {{/sections.projects}}
+        {{/cv}}
     </div>
 
     {{>site/templates/footer.html}}

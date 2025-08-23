@@ -1,10 +1,12 @@
 cradle:
-  cabal:
+  stack:
     - path: "./app"
-      component: "exe:website"
+      component: "website:exe:website"
     - path: "./site"
-      component: "exe:website"
+      component: "website:exe:website"
     - path: "./site/posts"
-      component: "exe:website"
+      component: "website:exe:website"
     - path: "./doctests"
-      component: "test:doctests"
+      component: "website:test:doctests"
+    - path: "./tests"
+      component: "website:test:tests"

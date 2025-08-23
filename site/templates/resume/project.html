@@ -1,49 +1,9 @@
 <h3>{{name}}</h3>
-{{#description}}
-    <p>Description: {{{.}}}</p>
-{{/description}}
+{{#summary}}
+<p>{{summary}}</p>
+{{/summary}}
+<ul>
 {{#highlights}}
-    <p>
-        Highlights:
-        <ul>
-            {{#items}}
-                <li>{{{.}}}</li>
-            {{/items}}
-        </ul>
-    </p>
+    <li>{{.}}</li>
 {{/highlights}}
-{{#keywords}}
-    <p>
-        Keywords:
-        <ul>
-            {{#items}}
-                <li>{{.}}</li>
-            {{/items}}
-        </ul>
-    </p>
-{{/keywords}}
-{{#startDate}}
-    <p>Start Date: {{.}}</p>
-{{/startDate}}
-{{#endDate}}
-    <p>End Date: {{.}}</p>
-{{/endDate}}
-{{#url}}
-    <p>URL: <a href="{{url}}">{{url}}</a></p>
-{{/url}}
-{{#roles}}
-    <p>
-        Roles:
-        <ul>
-            {{#items}}
-                <li>{{.}}</li>
-            {{/items}}
-        </ul>
-    </p>
-{{/roles}}
-{{#entity}}
-    <p>Entity: {{.}}</p>
-{{/entity}}
-{{#type}}
-    <p>Type: {{.}}</p>
-{{/type}}
+</ul>

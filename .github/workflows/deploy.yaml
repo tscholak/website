@@ -1,0 +1,80 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          # this might remove tools that are actually needed,
+          # if set to "true" but frees about 6 GB
+          tool-cache: false
+          
+          # all of these default to true, but feel free to set to
+          # "false" if necessary for your workflow
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: |
+          git log --pretty=format:"%h %ci %an %s" -n 1 -- site/
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.stack
+            .stack-work
+          key: stack-${{ runner.os }}-${{ hashFiles('**/stack.yaml.lock') }}
+          restore-keys: |
+            stack-${{ runner.os }}-
+      - uses: cachix/install-nix-action@v31
+      - uses: cachix/cachix-action@v10
+        with:
+          name: tscholak
+          authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
+          extraPullNames: devenv,nix-community
+      - run: nix profile add nixpkgs#devenv
+      - run: devenv shell devenv-generate-build
+        env:
+          CACHIX_AUTH_TOKEN: "${{ secrets.CACHIX_AUTH_TOKEN }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build
+          path: ./build
+
+  deploy:
+    if: github.event_name == 'push'
+    name: "Deploy"
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: build
+          path: ./build
+      - uses: crazy-max/ghaction-github-pages@v4.2.0
+        with:
+          repo: tscholak/tscholak.github.io
+          target_branch: main
+          build_dir: ./build
+          keep_history: false
+          jekyll: false
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}

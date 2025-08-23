@@ -6,6 +6,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -27,11 +28,13 @@ import Control.Lens (at, ix, (?~), (^?))
 import Control.Monad (void)
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import Data.Aeson (toJSON)
-import qualified Data.Aeson as A (FromJSON (parseJSON), KeyValue ((.=)), Options (..), Result (Error, Success), ToJSON (toJSON), Value (..), decode', defaultOptions, fromJSON, genericParseJSON, genericToEncoding, genericToJSON, object, withObject, (.:), (.:?))
-import qualified Data.Aeson.KeyMap as KM (mapMaybe, singleton, union)
-import qualified Data.Aeson.Lens as A (AsPrimitive (_String), AsValue (_Object), key, pattern Integer)
+import qualified Data.Aeson as A (Encoding, FromJSON (parseJSON), KeyValue ((.=)), Options (..), Result (Error, Success), ToJSON (toJSON), Value (..), decode', defaultOptions, fromJSON, genericParseJSON, genericToEncoding, genericToJSON, object, withObject, (.:), (.:?))
+import qualified Data.Aeson.KeyMap as KM (insert, lookup, mapMaybe, singleton, union)
+import qualified Data.Aeson.Lens as A (AsValue (_Object, _String), key, pattern Integer)
 import qualified Data.Aeson.Parser.Internal as A (jsonEOF')
 import qualified Data.Attoparsec.ByteString as Atto
+import qualified Data.Binary.Get as Get
+import qualified Data.Binary.Put as Put
 import qualified Data.ByteString as BS
 import Data.Either.Validation (Validation)
 import qualified Data.Either.Validation as Validation
@@ -48,26 +51,22 @@ import Data.Ord (Down (Down))
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Encoding as TL
-import Data.Time (UTCTime, defaultTimeLocale, formatTime, getCurrentTime, iso8601DateFormat, parseTimeOrError)
+import Data.Time (UTCTime, defaultTimeLocale, getCurrentTime, parseTimeOrError)
+import Data.Time.Format.ISO8601 (iso8601Show)
 import Data.Vector as V (mapMaybe)
 import qualified Data.Yaml as Yaml
-import Development.Shake (Action, ShakeOptions (..), copyFileChanged, forP, getDirectoryFiles, readFile', shakeOptions, writeFile', pattern Chatty)
+import Development.Shake (Action, ShakeOptions (..), cmd_, copyFileChanged, forP, getDirectoryFiles, readFile', shakeOptions, writeFile', pattern Chatty)
 import Development.Shake.Classes (Binary (..))
 import Development.Shake.FilePath (dropDirectory1, takeExtension, (-<.>), (</>))
 import Development.Shake.Forward (cacheAction, shakeForward)
 import GHC.Generics (Generic)
 import Network.URI (URI (uriPath), parseURI)
-import Network.URI.JSON ()
 import qualified Options.Applicative as Options
-import qualified PPrint as Dex ()
 import qualified Slick (compileTemplate', convert, substitute)
-import qualified Slick.Pandoc as Slick (defaultHtml5Options, loadUsing, markdownToHTMLWithOpts)
-import qualified Syntax as Dex
+import qualified Slick.Pandoc as Slick (defaultHtml5Options, markdownToHTMLWithOpts)
 import System.Process (readProcess)
 import Text.Casing (fromHumps, toQuietSnake)
 import qualified Text.Pandoc as Pandoc
-import qualified Text.Pandoc.Readers.Dex as Pandoc
-import qualified TopLevel as Dex
 
 -- | data type for configuration
 data Config f = Config
@@ -83,19 +82,24 @@ deriving stock instance (Barbie.AllBF Show f Config) => Show (Config f)
 deriving stock instance (Barbie.AllBF Eq f Config) => Eq (Config f)
 
 instance (Alternative f) => Semigroup (Config f) where
+  (<>) :: (Alternative f) => Config f -> Config f -> Config f
   (<>) = Barbie.bzipWith (<|>)
 
 instance (Alternative f) => Monoid (Config f) where
+  mempty :: (Alternative f) => Config f
   mempty = Barbie.bpure empty
 
 configCustomJSONOptions :: A.Options
 configCustomJSONOptions = A.defaultOptions {A.fieldLabelModifier = toQuietSnake . fromHumps}
 
 instance (Barbie.AllBF A.FromJSON f Config) => A.FromJSON (Config f) where
+  parseJSON :: (Barbie.AllBF Yaml.FromJSON f Config) => Yaml.Value -> Yaml.Parser (Config f)
   parseJSON = A.genericParseJSON configCustomJSONOptions
 
 instance (Barbie.AllBF A.ToJSON f Config) => A.ToJSON (Config f) where
+  toJSON :: (Barbie.AllBF Yaml.ToJSON f Config) => Config f -> Yaml.Value
   toJSON = A.genericToJSON configCustomJSONOptions
+  toEncoding :: (Barbie.AllBF Yaml.ToJSON f Config) => Config f -> A.Encoding
   toEncoding = A.genericToEncoding configCustomJSONOptions
 
 -- | markdown options
@@ -118,48 +122,45 @@ markdownOptions =
 markdownToHTML :: T.Text -> Action A.Value
 markdownToHTML = Slick.markdownToHTMLWithOpts markdownOptions Slick.defaultHtml5Options
 
--- | convert literal Haskell code to html
-codeToHTML :: T.Text -> Action A.Value
-codeToHTML = Slick.markdownToHTMLWithOpts opts Slick.defaultHtml5Options
+-- | Haskell code options
+codeOptions :: Pandoc.ReaderOptions
+codeOptions =
+  Pandoc.def {Pandoc.readerExtensions = pandocExtensions}
   where
-    opts = Pandoc.def {Pandoc.readerExtensions = pandocExtensions}
     pandocExtensions =
-      Pandoc.extensionsFromList
-        [ Pandoc.Ext_literate_haskell,
-          Pandoc.Ext_yaml_metadata_block
+      mconcat
+        [ Pandoc.extensionsFromList
+            [ Pandoc.Ext_literate_haskell,
+              Pandoc.Ext_yaml_metadata_block
+            ],
+          Pandoc.githubMarkdownExtensions
         ]
 
--- | convert Dex code to html
-dexToHTML :: T.Text -> Action A.Value
-dexToHTML =
-  Slick.loadUsing
-    (Pandoc.readDex pandocOpts dexOpts)
-    (Pandoc.writeHtml5String Slick.defaultHtml5Options)
-  where
-    pandocOpts = Pandoc.def {Pandoc.readerExtensions = pandocExtensions}
-    pandocExtensions =
-      Pandoc.extensionsFromList
-        [ Pandoc.Ext_yaml_metadata_block
-        ]
-    dexOpts = Dex.EvalConfig Dex.LLVM dexLibraryPath dexPreludePath Nothing
-    dexLibraryPath = Nothing
-    dexPreludePath = Nothing
+-- | convert literal Haskell code to html
+codeToHTML :: T.Text -> Action A.Value
+codeToHTML = Slick.markdownToHTMLWithOpts codeOptions Slick.defaultHtml5Options
+
+-- | compile and run code
+compileAndRunCode :: FilePath -> Action ()
+compileAndRunCode srcPath = cmd_ ("stack" :: String) [("runhaskell" :: String), srcPath]
 
 -- | add site meta data to a JSON object
 withSiteMeta :: Config Identity -> A.Value -> A.Value
 withSiteMeta config (A.Object obj) = A.Object $ KM.union obj siteMetaObj
   where
-    A.Object siteMetaObj = A.toJSON . siteMeta $ config
+    siteMetaObj = case A.toJSON . siteMeta $ config of
+      A.Object obj' -> obj'
+      _ -> error "siteMeta should serialize to an Object"
 withSiteMeta _ v = error $ "only add site meta to objects, not " ++ show v
 
 -- | Site meta data
 data SiteMeta f = SiteMeta
-  { siteBaseUrl :: !(f URI), -- e.g. https://example.ca
+  { siteBaseUrl :: !(f URI),
     siteTitle :: !(f String),
     siteAuthor :: !(f String),
     siteDescription :: !(f String),
     siteKeywords :: !(f String),
-    siteTwitterHandle :: !(f (Maybe String)), -- Without @
+    siteTwitterHandle :: !(f (Maybe String)),
     siteTwitchHandle :: !(f (Maybe String)),
     siteYoutubeHandle :: !(f (Maybe String)),
     siteGithubUser :: !(f (Maybe String)),
@@ -174,19 +175,24 @@ deriving stock instance (Barbie.AllBF Show f SiteMeta) => Show (SiteMeta f)
 deriving stock instance (Barbie.AllBF Eq f SiteMeta) => Eq (SiteMeta f)
 
 instance (Alternative f) => Semigroup (SiteMeta f) where
+  (<>) :: (Alternative f) => SiteMeta f -> SiteMeta f -> SiteMeta f
   (<>) = Barbie.bzipWith (<|>)
 
 instance (Alternative f) => Monoid (SiteMeta f) where
+  mempty :: (Alternative f) => SiteMeta f
   mempty = Barbie.bpure empty
 
 siteMetaCustomJSONOptions :: A.Options
 siteMetaCustomJSONOptions = A.defaultOptions {A.fieldLabelModifier = toQuietSnake . fromHumps . drop 4}
 
 instance (Barbie.AllBF A.FromJSON f SiteMeta) => A.FromJSON (SiteMeta f) where
+  parseJSON :: (Barbie.AllBF Yaml.FromJSON f SiteMeta) => Yaml.Value -> Yaml.Parser (SiteMeta f)
   parseJSON = A.genericParseJSON siteMetaCustomJSONOptions
 
 instance (Barbie.AllBF A.ToJSON f SiteMeta) => A.ToJSON (SiteMeta f) where
+  toJSON :: (Barbie.AllBF Yaml.ToJSON f SiteMeta) => SiteMeta f -> Yaml.Value
   toJSON = A.genericToJSON siteMetaCustomJSONOptions
+  toEncoding :: (Barbie.AllBF Yaml.ToJSON f SiteMeta) => SiteMeta f -> A.Encoding
   toEncoding = A.genericToEncoding siteMetaCustomJSONOptions
 
 -- | option parser for config
@@ -317,13 +323,17 @@ newtype TagName = TagName String
   deriving stock (Generic, Eq, Ord, Show)
 
 instance A.FromJSON TagName where
+  parseJSON :: Yaml.Value -> Yaml.Parser TagName
   parseJSON v = TagName <$> A.parseJSON v
 
 instance A.ToJSON TagName where
+  toJSON :: TagName -> Yaml.Value
   toJSON (TagName tagName) = A.toJSON tagName
 
 instance Binary TagName where
+  put :: TagName -> Put.Put
   put (TagName tagName) = put tagName
+  get :: Get.Get TagName
   get = TagName <$> get
 
 -- | data type for article kinds
@@ -389,6 +399,7 @@ deriving stock instance Ord (Article kind)
 deriving stock instance Show (Article kind)
 
 instance Binary (Article 'BlogPostKind) where
+  put :: Article 'BlogPostKind -> Put.Put
   put BlogPost {..} = do
     put bpTitle
     put bpContent
@@ -401,6 +412,7 @@ instance Binary (Article 'BlogPostKind) where
     put bpImage
     put bpPrev
     put bpNext
+  get :: Get.Get (Article BlogPostKind)
   get =
     BlogPost
       <$> get
@@ -416,6 +428,7 @@ instance Binary (Article 'BlogPostKind) where
       <*> get
 
 instance Binary (Article 'PublicationKind) where
+  put :: Article PublicationKind -> Put.Put
   put Publication {..} = do
     put pubTitle
     put pubAuthor
@@ -435,6 +448,7 @@ instance Binary (Article 'PublicationKind) where
     put pubPoster
     put pubPrev
     put pubNext
+  get :: Get.Get (Article PublicationKind)
   get =
     Publication
       <$> get
@@ -457,6 +471,7 @@ instance Binary (Article 'PublicationKind) where
       <*> get
 
 instance A.ToJSON (Article 'BlogPostKind) where
+  toJSON :: Article BlogPostKind -> Yaml.Value
   toJSON BlogPost {..} =
     A.object
       [ "title" A..= bpTitle,
@@ -473,6 +488,7 @@ instance A.ToJSON (Article 'BlogPostKind) where
       ]
 
 instance A.ToJSON (Article 'PublicationKind) where
+  toJSON :: Article PublicationKind -> Yaml.Value
   toJSON Publication {..} =
     A.object
       [ "title" A..= pubTitle,
@@ -496,6 +512,7 @@ instance A.ToJSON (Article 'PublicationKind) where
       ]
 
 instance A.FromJSON (Article 'BlogPostKind) where
+  parseJSON :: Yaml.Value -> Yaml.Parser (Article BlogPostKind)
   parseJSON =
     A.withObject "Blog post" $ \o ->
       BlogPost
@@ -512,6 +529,7 @@ instance A.FromJSON (Article 'BlogPostKind) where
         <*> o A..:? "next"
 
 instance A.FromJSON (Article 'PublicationKind) where
+  parseJSON :: Yaml.Value -> Yaml.Parser (Article PublicationKind)
   parseJSON =
     A.withObject "Publication" $ \o ->
       Publication
@@ -542,7 +560,7 @@ assignAdjacentArticles posts =
         go Publication {} = cur {pubPrev = prev, pubNext = next}
         go BlogPost {} = cur {bpPrev = prev, bpNext = next}
      in go cur
-    | (cur, i) <- zip posts [0 :: Int ..]
+  | (cur, i) <- zip posts [0 :: Int ..]
   ]
 
 -- | type-erased article
@@ -554,17 +572,20 @@ withSomeArticle :: forall a. SomeArticle -> (forall kind. Article kind -> a) -> 
 withSomeArticle (SomeArticle article) f = f article
 
 instance Eq SomeArticle where
+  (==) :: SomeArticle -> SomeArticle -> Bool
   (SomeArticle a@BlogPost {}) == (SomeArticle b@BlogPost {}) = a == b
   (SomeArticle a@Publication {}) == (SomeArticle b@Publication {}) = a == b
   _ == _ = False
 
 instance Ord SomeArticle where
+  compare :: SomeArticle -> SomeArticle -> Ordering
   compare (SomeArticle a@BlogPost {}) (SomeArticle b@BlogPost {}) = compare a b
   compare (SomeArticle BlogPost {}) (SomeArticle Publication {}) = LT
   compare (SomeArticle Publication {}) (SomeArticle BlogPost {}) = GT
   compare (SomeArticle a@Publication {}) (SomeArticle b@Publication {}) = compare a b
 
 instance A.FromJSON SomeArticle where
+  parseJSON :: Yaml.Value -> Yaml.Parser SomeArticle
   parseJSON =
     A.withObject "some article" $ \o -> do
       kind :: String <- o A..: "kind"
@@ -574,6 +595,7 @@ instance A.FromJSON SomeArticle where
         _ -> fail "Expected blog post or publication"
 
 instance A.ToJSON SomeArticle where
+  toJSON :: SomeArticle -> Yaml.Value
   toJSON (SomeArticle article) = case article of
     BlogPost {} -> A.object ["kind" A..= ("blog post" :: String), "article" A..= article]
     Publication {} -> A.object ["kind" A..= ("publication" :: String), "article" A..= article]
@@ -584,10 +606,12 @@ newtype ArticlesInfo kind = ArticlesInfo
   }
   deriving stock (Generic, Eq, Ord, Show)
 
-instance A.ToJSON (Article kind) => A.ToJSON (ArticlesInfo kind) where
+instance (A.ToJSON (Article kind)) => A.ToJSON (ArticlesInfo kind) where
+  toJSON :: (Yaml.ToJSON (Article kind)) => ArticlesInfo kind -> Yaml.Value
   toJSON ArticlesInfo {..} = A.object ["articles" A..= articles]
 
-instance A.FromJSON (Article kind) => A.FromJSON (ArticlesInfo kind) where
+instance (A.FromJSON (Article kind)) => A.FromJSON (ArticlesInfo kind) where
+  parseJSON :: (Yaml.FromJSON (Article kind)) => Yaml.Value -> Yaml.Parser (ArticlesInfo kind)
   parseJSON =
     A.withObject "ArticlesInfo" $ \o ->
       ArticlesInfo <$> o A..: "articles"
@@ -601,6 +625,7 @@ data Tag = Tag
   deriving stock (Generic, Eq, Ord, Show)
 
 instance A.ToJSON Tag where
+  toJSON :: Tag -> Yaml.Value
   toJSON Tag {..} =
     A.object
       [ "tag" A..= name,
@@ -609,6 +634,7 @@ instance A.ToJSON Tag where
       ]
 
 instance A.FromJSON Tag where
+  parseJSON :: Yaml.Value -> Yaml.Parser Tag
   parseJSON =
     A.withObject "Tag" $ \o ->
       Tag
@@ -651,7 +677,7 @@ buildIndex config = cacheAction ("build" :: T.Text, indexSrcPath) $ do
 -- | find and build all blog posts
 buildBlogPostList :: Config Identity -> Action [Article 'BlogPostKind]
 buildBlogPostList config = do
-  blogPostPaths <- getDirectoryFiles "." ["site/posts//*.md", "site/posts//*.lhs", "site/posts//*.dx"]
+  blogPostPaths <- getDirectoryFiles "." ["site/posts//*.md", "site/posts//*.lhs"]
   blogPosts <- forP blogPostPaths (buildBlogPost config)
   let blogPosts' = assignAdjacentArticles . sortOn (Down . parseDate . bpDate) $ blogPosts
   _ <- forP blogPosts' (writeBlogPost config)
@@ -671,9 +697,10 @@ buildBlogPost config postSrcPath = cacheAction ("build" :: T.Text, postSrcPath) 
   postContent <- readFile' postSrcPath
   postData <- case takeExtension postSrcPath of
     ".md" -> markdownToHTML . T.pack $ postContent
-    ".lhs" -> codeToHTML . T.pack $ postContent
-    ".dx" -> dexToHTML . T.pack $ postContent
-    _ -> fail "Expected .md, .lhs, or .dx"
+    ".lhs" -> do
+      -- compileAndRunCode postSrcPath
+      codeToHTML . T.pack $ postContent
+    _ -> fail "Expected .md or .lhs"
   gitHash <- getGitHash postSrcPath >>= prettyGitHash config
   let postUrl = T.pack . dropDirectory1 $ postSrcPath -<.> "html"
       withPostUrl = A._Object . at "url" ?~ A.String postUrl
@@ -687,7 +714,8 @@ buildBlogPost config postSrcPath = cacheAction ("build" :: T.Text, postSrcPath) 
 writeBlogPost :: Config Identity -> Article 'BlogPostKind -> Action ()
 writeBlogPost config post@BlogPost {..} = do
   postTemplate <- Slick.compileTemplate' "site/templates/post.html"
-  writeFile' (runIdentity (outputFolder config) </> bpUrl) . T.unpack
+  writeFile' (runIdentity (outputFolder config) </> bpUrl)
+    . T.unpack
     . Slick.substitute postTemplate
     . withSiteMeta config
     . A.toJSON
@@ -726,7 +754,8 @@ buildPublication config publicationSrcPath = cacheAction ("build" :: T.Text, pub
 writePublication :: Config Identity -> Article 'PublicationKind -> Action ()
 writePublication config publication@Publication {..} = do
   publicationTemplate <- Slick.compileTemplate' "site/templates/publication.html"
-  writeFile' (runIdentity (outputFolder config) </> pubUrl) . T.unpack
+  writeFile' (runIdentity (outputFolder config) </> pubUrl)
+    . T.unpack
     . Slick.substitute publicationTemplate
     . withSiteMeta config
     . A.toJSON
@@ -794,29 +823,41 @@ buildContact config = cacheAction ("build" :: T.Text, contactSrcPath) $ do
 -- | build resume page
 buildResume :: Config Identity -> Action ()
 buildResume config = cacheAction ("build" :: T.Text, resumeSrcPath) $ do
-  resumeJson <- readFile' resumeSrcPath
+  resumeYamlBS <- liftIO $ BS.readFile resumeSrcPath
   resumeTemplate <- Slick.compileTemplate' "site/templates/resume.html"
   gitHash <- getGitHash resumeSrcPath >>= prettyGitHash config
-  let resumeData =
-        fromMaybe "{}" $
-          do
-            json <- A.decode' . TL.encodeUtf8 $ TL.pack resumeJson
-            go json
-        where
-          go :: A.Value -> Maybe A.Value
-          go (A.Object a) = Just . A.Object $ KM.mapMaybe go a
-          go (A.Array a) = case V.mapMaybe go a of
-            a'
-              | null a -> Nothing
-              | otherwise -> Just . A.Object . KM.singleton "items" . A.Array $ a'
-          go x = Just x
+  let resumeData = case Yaml.decodeEither' resumeYamlBS of
+        Left err -> error $ "Failed to parse YAML: " ++ show err
+        Right val -> addUrls val
   let withGitHash = A._Object . at "gitHash" ?~ A.String (T.pack gitHash)
       fullResumeData = withSiteMeta config . withGitHash $ resumeData
       resumeHTML = T.unpack $ Slick.substitute resumeTemplate fullResumeData
   writeFile' (runIdentity (outputFolder config) </> "resume.html") resumeHTML
   where
     resumeSrcPath :: FilePath
-    resumeSrcPath = "site/resume.json"
+    resumeSrcPath = "site/resume.yaml"
+    
+    addUrls (A.Object obj) = case KM.lookup "cv" obj of
+      Just (A.Object cv) -> case KM.lookup "social_networks" cv of
+        Just (A.Array networks) -> 
+          let networks' = fmap addUrl networks
+              cv' = KM.insert "social_networks" (A.Array networks') cv
+          in A.Object $ KM.insert "cv" (A.Object cv') obj
+        _ -> A.Object obj
+      _ -> A.Object obj
+    addUrls v = v
+    
+    addUrl (A.Object net) = case (KM.lookup "network" net, KM.lookup "username" net) of
+      (Just (A.String "GitHub"), Just (A.String user)) -> 
+        A.Object $ KM.insert "url" (A.String $ "https://github.com/" <> user) net
+      (Just (A.String "LinkedIn"), Just (A.String user)) -> 
+        A.Object $ KM.insert "url" (A.String $ "https://linkedin.com/in/" <> user) net
+      (Just (A.String "X"), Just (A.String user)) -> 
+        A.Object $ KM.insert "url" (A.String $ "https://x.com/" <> user) net
+      (Just (A.String "Google Scholar"), Just (A.String user)) -> 
+        A.Object $ KM.insert "url" (A.String $ "https://scholar.google.com/citations?user=" <> user) net
+      _ -> A.Object net
+    addUrl v = v
 
 -- | copy all static files
 copyStaticFiles :: Config Identity -> Action ()
@@ -835,13 +876,9 @@ parseDate = parseTimeOrError True defaultTimeLocale "%b %e, %Y"
 formatDate :: String -> String
 formatDate = toIsoDate . parseDate
 
--- | RFC 3339 date format
-rfc3339 :: Maybe String
-rfc3339 = Just "%H:%M:SZ"
-
 -- | convert UTC time to RFC 3339 format
 toIsoDate :: UTCTime -> String
-toIsoDate = formatTime defaultTimeLocale (iso8601DateFormat rfc3339)
+toIsoDate = iso8601Show
 
 -- | build feed
 buildFeed :: Config Identity -> [SomeArticle] -> Action ()
@@ -901,12 +938,13 @@ prettyGitHash config GitHash {..} = do
 -- | parser info for command line arguments
 parserInfo ::
   forall b f.
-  Barbie.TraversableB b =>
+  (Barbie.TraversableB b) =>
   b (Options.Parser `Compose` f) ->
   Options.ParserInfo (b f, Maybe FilePath)
 parserInfo b =
   let parser =
-        (,) <$> Barbie.bsequence b
+        (,)
+          <$> Barbie.bsequence b
           <*> optional
             ( Options.option Options.str $
                 Options.long "config-file"

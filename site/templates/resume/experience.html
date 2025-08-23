@@ -1,0 +1,10 @@
+<h3>{{position}} at {{company}}</h3>
+<p>
+    {{#location}}{{location}} | {{/location}}
+    {{#start_date}}{{start_date}}{{/start_date}}{{#end_date}} - {{end_date}}{{/end_date}}
+</p>
+<ul>
+{{#highlights}}
+    <li>{{.}}</li>
+{{/highlights}}
+</ul>

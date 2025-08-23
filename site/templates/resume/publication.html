@@ -1,13 +1,12 @@
-<h3>{{{name}}}</h3>
-{{#publisher}}
-    <p>Publisher: {{.}}</p>
-{{/publisher}}
-{{#releaseDate}}
-    <p>Release Date: {{.}}</p>
-{{/releaseDate}}
-{{#website}}
-    <p>Website: <a href="{{website}}">{{.}}</a></p>
-{{/website}}
+<h3>{{title}}</h3>
+<p id="csl">
+    {{#authors}}<span>{{.}}</span>{{/authors}}
+</p>
+<p>
+    {{#journal}}{{journal}} | {{/journal}}
+    {{#date}}{{date}}{{/date}}
+    {{#doi}} | <a href="https://doi.org/{{doi}}">DOI: {{doi}}</a>{{/doi}}
+</p>
 {{#summary}}
-    <p>Summary: {{{.}}}</p>
+<p>{{summary}}</p>
 {{/summary}}
