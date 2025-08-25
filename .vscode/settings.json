@@ -1,3 +1,6 @@
 {
   "nix.enableLanguageServer": true,
+  "yaml.schemas": {
+    "https://raw.githubusercontent.com/rendercv/rendercv/main/schema.json": "site/resume.yaml"
+  },
 }

@@ -15,6 +15,7 @@
     pkgs.nodejs
     pkgs.nodePackages.serve
     pkgs.watchexec
+    pkgs.check-jsonschema
   ];
 
   languages.haskell = {
@@ -87,6 +88,13 @@
         MD033 = false;
         MD034 = false;
       };
+    };
+    rendercv-schema = {
+      enable = true;
+      name = "RenderCV schema";
+      entry = "${pkgs.check-jsonschema}/bin/check-jsonschema --schemafile https://raw.githubusercontent.com/rendercv/rendercv/037e3b6f65d0b7aa448302f4796c5b186f92120a/schema.json";
+      files = "^site/resume\\.yaml$";
+      language = "system";
     };
   };
 }

@@ -1,4 +1,3 @@
-$schema: "https://raw.githubusercontent.com/sinaatalay/rendercv/main/schema.json"
 cv:
   name: "Torsten Scholak"
   location: "Montréal, QC, Canada"
@@ -158,11 +157,6 @@ cv:
         highlights:
           - "Added compile-time shape/type checking and transformer examples"
           - "Live-coded demo at FP Berlin (8.9k+ views, recording at https://www.youtube.com/watch?v=ZnYa99QoznE&t=1689)."
-    # technologies:
-    #   - label: "Languages"
-    #     details: ""
-    #   - label: "Software"
-    #     details: ""
 design:
   theme: "sb2nov"
   page:
