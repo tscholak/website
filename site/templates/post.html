@@ -28,6 +28,13 @@
     </div>
 
     <div>
+        {{#license}}
+        {{#url}}<a href="{{.}}">{{/url}}{{name}}{{#url}}</a>{{/url}}
+        {{#note}} — {{.}}{{/note}}
+        {{/license}}
+    </div>
+
+    <div>
         {{#next}}
         <a href="/{{url}}">
             <div>

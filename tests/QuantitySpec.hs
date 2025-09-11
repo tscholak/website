@@ -5,8 +5,21 @@ import Quantity
   ( Quantity,
     Unit,
     convert,
+    convertWith,
+    canonical,
+    canonicalWith,
     one,
+    unQ,
+    scalar,
+    toUnit,
+    inUnit,
     qCeiling,
+    qFromIntegral,
+    qScale,
+    qExp,
+    qLog,
+    qPow,
+    qClamp,
     second,
     minute,
     hour,
@@ -33,6 +46,7 @@ import Test.Hspec
     it,
     shouldBe,
     shouldThrow,
+    shouldSatisfy,
   )
 
 task, node :: Unit
@@ -226,3 +240,110 @@ spec = do
       let powerQuantity = 50.0 *@ watt  -- kg⋅m²⋅s⁻³
           energyQuantity = 100.0 *@ joule  -- kg⋅m²⋅s⁻²
       evaluate (powerQuantity + energyQuantity) `shouldThrow` errorCall "add: incompatible units: kg·m^2.0·s^-3.0 vs kg·m^2.0·s^-2.0"
+
+  describe "unQ function - strict dimensionless extraction" $ do
+    it "extracts magnitude from dimensionless quantities" $ do
+      let dimensionless = 42.5 *@ one
+      unQ dimensionless `shouldBe` 42.5
+
+    it "throws error on quantities with units" $ do
+      let withUnits = 5.0 *@ meter
+      evaluate (unQ withUnits) `shouldThrow` errorCall "unQ: quantity has units"
+
+  describe "scalar function - unit-safe extraction" $ do
+    it "extracts dimensionless values directly" $ do
+      let dimensionless = 42.5 *@ one
+      scalar dimensionless `shouldBe` 42.5
+
+    it "extracts scalar from converted dimensionless quantity" $ do
+      let duration = 2.0 *@ hour
+      let converted = convert duration (1 *@ second)
+      let dimensionless = converted / (1 *@ second)  -- make dimensionless
+      scalar dimensionless `shouldBe` 7200.0
+
+  describe "Mathematical functions on dimensionless quantities" $ do
+    it "qExp works on dimensionless quantities" $ do
+      let q = 1.0 *@ one
+      qExp q `shouldSatisfy` (\x -> abs (x - exp 1.0) < 0.01)
+
+    it "qExp throws error on quantities with units" $ do
+      let q = 1.0 *@ meter
+      evaluate (qExp q) `shouldThrow` errorCall "unQ: quantity has units"
+
+    it "qLog works on positive dimensionless quantities" $ do
+      let q = (exp 2.0) *@ one
+      qLog q `shouldSatisfy` (\x -> abs (x - 2.0) < 0.01)
+
+    it "qPow raises dimensionless quantity to power" $ do
+      let q = 2.0 *@ one
+      qPow q 3.0 `shouldSatisfy` (\x -> abs (x - 8.0) < 0.01)
+
+  describe "qScale - scalar multiplication" $ do
+    it "scales quantity magnitude while preserving units" $ do
+      let q = 5.0 *@ meter
+      let scaled = qScale 3.0 q
+      show scaled `shouldBe` "15.0 m"
+
+    it "works with dimensionless quantities" $ do
+      let q = 2.0 *@ one
+      let scaled = qScale 0.5 q
+      show scaled `shouldBe` "1.0"
+
+  describe "qClamp - quantity clamping" $ do
+    it "clamps quantity between bounds with same units" $ do
+      let q = 15.0 *@ meter
+      let bounds = (5.0 *@ meter, 10.0 *@ meter)
+      let clamped = qClamp bounds q
+      show clamped `shouldBe` "10.0 m"
+
+    it "handles quantity within bounds" $ do
+      let q = 7.0 *@ meter
+      let bounds = (5.0 *@ meter, 10.0 *@ meter)
+      let clamped = qClamp bounds q
+      show clamped `shouldBe` "7.0 m"
+
+    it "clamps to lower bound" $ do
+      let q = 2.0 *@ meter
+      let bounds = (5.0 *@ meter, 10.0 *@ meter)
+      let clamped = qClamp bounds q
+      show clamped `shouldBe` "5.0 m"
+
+    it "works with convertible units" $ do
+      let q = 2.0 *@ hour  -- 2 hours = 7200 seconds
+      let bounds = (1.0 *@ hour, 1.5 *@ hour)  -- 3600-5400 seconds
+      let clamped = qClamp bounds q
+      show clamped `shouldBe` "1.5 h"
+
+  describe "qFromIntegral - type conversion" $ do
+    it "converts integer quantities to numeric quantities" $ do
+      let intQ = 5 *@ meter :: Quantity Integer
+      let doubleQ = qFromIntegral intQ :: Quantity Double
+      show doubleQ `shouldBe` "5.0 m"
+
+    it "preserves units during conversion" $ do
+      let intQ = 100 *@ (meter ./ second) :: Quantity Integer
+      let doubleQ = qFromIntegral intQ :: Quantity Double
+      show doubleQ `shouldBe` "100.0 m·s^-1.0"
+
+  describe "toUnit - direct unit conversion" $ do
+    it "converts to compatible units" $ do
+      let q = 1.0 *@ hour
+      let inSeconds = toUnit q second
+      show inSeconds `shouldBe` "3600.0 s"
+
+    it "throws error on incompatible units" $ do
+      let q = 5.0 *@ meter
+      evaluate (toUnit q second) `shouldThrow` errorCall "convert: incompatible units: m vs s"
+
+  describe "inUnit - extract value in specific unit" $ do
+    it "extracts value in specified unit" $ do
+      let q = 2.0 *@ hour
+      inUnit q second `shouldBe` 7200.0
+
+    it "works with dimensionless quantities" $ do
+      let q = 42.0 *@ one
+      inUnit q one `shouldBe` 42.0
+
+    it "throws error on incompatible units" $ do
+      let q = 5.0 *@ meter
+      evaluate (inUnit q second) `shouldThrow` errorCall "convert: incompatible units: m vs s"

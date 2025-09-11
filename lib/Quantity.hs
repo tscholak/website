@@ -15,6 +15,15 @@ module Quantity
     convert,
     convertWith,
     one,
+    -- Helpers
+    toUnit,
+    inUnit,
+    scalar,
+    qScale,
+    qExp,
+    qLog,
+    qPow,
+    qClamp,
     qCeiling,
     qFromIntegral,
     -- Common units
@@ -22,6 +31,7 @@ module Quantity
     minute,
     hour,
     day,
+    month,
     year,
     dollar,
     meter,
@@ -34,7 +44,7 @@ module Quantity
   )
 where
 
-import Data.List (intercalate, find, sort)
+import Data.List (find, intercalate, sort)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import Data.Ratio (numerator)
@@ -130,12 +140,6 @@ instance (Show a) => Show (Quantity a) where
     | M.null m = show x
     | otherwise = show x <> " " <> prettyUnit (U m)
 
-qCeiling :: (RealFrac a, Integral b) => Quantity a -> Quantity b
-qCeiling (Q x u) = Q (ceiling x) u
-
-qFromIntegral :: (Integral a, Num b) => Quantity a -> Quantity b
-qFromIntegral (Q x u) = Q (fromIntegral x) u
-
 -------------------------------------------------------------------
 -- Pretty-printing
 -------------------------------------------------------------------
@@ -153,14 +157,70 @@ prettyUnit (U m)
             _ -> intercalate "·" units
 
 -------------------------------------------------------------------
+-- Helpers
+-------------------------------------------------------------------
+
+-- | Convert to the given unit.
+-- Errors if units are incompatible.
+toUnit :: (Fractional a) => Quantity a -> Unit -> Quantity a
+toUnit q u = convert q (1 *@ u)
+
+-- | Get the dimensionless magnitude in the given unit.
+-- Errors if units are incompatible.
+inUnit :: (Fractional a) => Quantity a -> Unit -> a
+inUnit q u = magnitude (toUnit q u)
+
+-- | Extract dimensionless scalar value, with automatic unit conversion.
+-- Errors if the quantity cannot be made dimensionless.
+scalar :: (Fractional a) => Quantity a -> a
+scalar q = q `inUnit` one
+
+-- | Multiply a quantity by a dimensionless scalar.
+qScale :: Num a => a -> Quantity a -> Quantity a
+qScale s (Q m u) = Q (s*m) u
+
+-- | Exponential on a dimensionless quantity.
+-- Errors if the quantity has units.
+qExp :: (Floating a) => Quantity a -> a
+qExp q = exp (unQ q)
+
+-- | Natural log of a dimensionless quantity.
+-- Errors if the quantity has units or is non-positive.
+qLog :: (Floating a, Ord a) => Quantity a -> a
+qLog q = log (unQ q)
+
+-- | Raise a dimensionless quantity to a real power.
+-- Errors if the quantity has units.
+qPow :: (Floating a) => Quantity a -> a -> a
+qPow q p = (unQ q) ** p
+
+-- | Clamp a quantity between two bounds, converting bounds to the quantity's unit.
+-- Errors if bounds are incompatible with q.
+qClamp :: (Fractional a, Ord a) => (Quantity a, Quantity a) -> Quantity a -> Quantity a
+qClamp (lo, hi) q =
+  let Q lo' uq = convert lo q
+      Q hi' _  = convert hi q
+      x        = max lo' (min (magnitude q) hi')
+  in Q x uq
+
+-- | Ceiling of a real-valued quantity, returning an integral quantity with the same unit.
+qCeiling :: (RealFrac a, Integral b) => Quantity a -> Quantity b
+qCeiling (Q x u) = Q (ceiling x) u
+
+-- | Convert the magnitude of a quantity from an integral type to a numeric type, preserving units.
+qFromIntegral :: (Integral a, Num b) => Quantity a -> Quantity b
+qFromIntegral (Q x u) = Q (fromIntegral x) u
+
+-------------------------------------------------------------------
 -- Common units
 -------------------------------------------------------------------
 
-second, minute, hour, day, year :: Unit
+second, minute, hour, day, month, year :: Unit
 second = unit "s"
 minute = unit "min"
 hour = unit "h"
 day = unit "day"
+month = unit "month"
 year = unit "year"
 
 dollar :: Unit
@@ -180,30 +240,29 @@ watt = unit "W"
 -------------------------------------------------------------------
 
 -- Atomic unit substitution rules
-data SubstitutionRule = SubstitutionRule 
-  { fromUnit :: String
-  , toScale :: Rational  
-  , toUnits :: Unit
+data SubstitutionRule = SubstitutionRule
+  { fromUnit :: String,
+    toScale :: Rational,
+    toUnits :: Unit
   }
 
 type RewriteRules = [SubstitutionRule]
 
 -- Define atomic conversions to base units
 baseUnitRules :: RewriteRules
-baseUnitRules = 
+baseUnitRules =
   [ -- Time units -> seconds
-    SubstitutionRule "min" 60 second,
-    SubstitutionRule "h" 3600 second,  
-    SubstitutionRule "day" (24 * 60 * 60) second,
-    SubstitutionRule "year" (365 * 24 * 60 * 60) second,
-    
+    SubstitutionRule {fromUnit = "min", toScale = 60, toUnits = second},
+    SubstitutionRule {fromUnit = "h", toScale = 3600, toUnits = second},
+    SubstitutionRule {fromUnit = "day", toScale = (24 * 60 * 60), toUnits = second},
+    SubstitutionRule {fromUnit = "month", toScale = (30 * 24 * 60 * 60), toUnits = second},
+    SubstitutionRule {fromUnit = "year", toScale = (365 * 24 * 60 * 60), toUnits = second},
     -- Energy/Force -> kg⋅m⋅s⁻²
-    SubstitutionRule "N" 1 (kg .* meter ./ (second .^ 2)),
-    SubstitutionRule "J" 1 (kg .* (meter .^ 2) ./ (second .^ 2)),
-    
+    SubstitutionRule {fromUnit = "N", toScale = 1, toUnits = (kg .* meter ./ (second .^ 2))},
+    SubstitutionRule {fromUnit = "J", toScale = 1, toUnits = (kg .* (meter .^ 2) ./ (second .^ 2))},
     -- Electrical -> base units
-    SubstitutionRule "V" 1 (kg .* (meter .^ 2) ./ (ampere .* (second .^ 3))),
-    SubstitutionRule "W" 1 (kg .* (meter .^ 2) ./ (second .^ 3))
+    SubstitutionRule {fromUnit = "V", toScale = 1, toUnits = (kg .* (meter .^ 2) ./ (ampere .* (second .^ 3)))},
+    SubstitutionRule {fromUnit = "W", toScale = 1, toUnits = (kg .* (meter .^ 2) ./ (second .^ 3))}
     -- Note: V⋅A will automatically become watts through V expansion
   ]
 
@@ -216,14 +275,14 @@ canonicalWith rules q = rewriteToFixpoint rules [] q
     rewriteToFixpoint :: (Fractional a) => RewriteRules -> [Unit] -> Quantity a -> Quantity a
     rewriteToFixpoint rules seen q@(Q x u)
       | u `elem` seen = q -- Cycle detected, stop here
-      | otherwise = 
+      | otherwise =
           let q' = rewriteOnce rules q
            in if units q' == u
-              then simplifyUnit q' -- Fixpoint reached, now simplify
-              else rewriteToFixpoint rules (u : seen) q'
-    
+                then simplifyUnit q' -- Fixpoint reached, now simplify
+                else rewriteToFixpoint rules (u : seen) q'
+
     rewriteOnce :: (Fractional a) => RewriteRules -> Quantity a -> Quantity a
-    rewriteOnce rules (Q x (U unitMap)) = 
+    rewriteOnce rules (Q x (U unitMap)) =
       M.foldlWithKey' applyRule (Q x one) unitMap
       where
         applyRule (Q acc uAcc) unitName exponent =
@@ -233,13 +292,13 @@ canonicalWith rules q = rewriteToFixpoint rules [] q
               let scaleFactor = fromRational (scale ^^ numerator exponent)
                   expandedUnit = targetUnit .^ exponent
                in Q (acc * scaleFactor) (uAcc .* expandedUnit)
-    
+
     findRule :: String -> RewriteRules -> Maybe SubstitutionRule
     findRule unitName = find (\(SubstitutionRule u _ _) -> u == unitName)
-    
+
     -- Simplify by canceling units and normalizing order
     simplifyUnit :: (Fractional a) => Quantity a -> Quantity a
-    simplifyUnit (Q x (U unitMap)) = 
+    simplifyUnit (Q x (U unitMap)) =
       let simplified = M.filter (/= 0) unitMap -- Remove zero exponents
           sortedUnits = M.fromList $ sort $ M.toList simplified
        in Q x (U sortedUnits)

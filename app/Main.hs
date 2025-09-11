@@ -354,6 +354,57 @@ newtype Items a = Items {items :: NonEmpty a}
 itemsToList :: Maybe (Items a) -> [a]
 itemsToList = maybe [] (NonEmpty.toList . items)
 
+-- | license info shown on a page
+data LicenseInfo = LicenseInfo
+  { name :: String,
+    url :: Maybe String,
+    note :: Maybe String
+  }
+  deriving stock (Generic, Eq, Ord, Show)
+
+instance A.ToJSON LicenseInfo where toJSON = A.genericToJSON A.defaultOptions
+
+instance A.FromJSON LicenseInfo where
+  parseJSON (A.Object o) =
+    LicenseInfo <$> o A..:  "name"
+                <*> o A..:? "url"
+                <*> o A..:? "note"
+  parseJSON (A.String s) =
+    pure LicenseInfo { name = T.unpack s, url = Nothing, note = Nothing }
+  parseJSON _ = fail "LicenseInfo must be a string or object"
+
+instance Binary LicenseInfo where
+  put LicenseInfo {..} = put name >> put url >> put note
+  get = LicenseInfo <$> get <*> get <*> get
+
+defaultCCBY :: LicenseInfo
+defaultCCBY =
+  LicenseInfo
+    { name = "CC BY 4.0",
+      url = Just "https://creativecommons.org/licenses/by/4.0/",
+      note = Just "Please attribute \"Torsten Scholak\" with a link to the original."
+    }
+
+extractOrDefaultLicense :: FilePath -> A.Value -> LicenseInfo
+extractOrDefaultLicense src v =
+  withFallback (v ^? A.key "license" >>= resultToMaybe . A.fromJSON)
+  where
+    resultToMaybe (A.Success a) = Just a
+    resultToMaybe _ = Nothing
+    mergeNote a b = case (a, b) of
+      (Nothing, x) -> x
+      (x, Nothing) -> x
+      (Just x, Just y) -> Just (x <> " " <> y)
+    withFallback m =
+      case m of
+        Just li -> li
+        Nothing ->
+          let extra =
+                if takeExtension src == ".lhs"
+                  then Just "Code blocks are BSD-3-Clause unless noted."
+                  else Nothing
+           in defaultCCBY {note = mergeNote (note defaultCCBY) extra}
+
 -- | data type for articles
 data Article kind where
   BlogPost ::
@@ -366,6 +417,7 @@ data Article kind where
       bpReadTime :: Int,
       bpGitHash :: String,
       bpImage :: Maybe String,
+      bpLicense :: Maybe LicenseInfo,
       bpPrev :: Maybe (Article 'BlogPostKind),
       bpNext :: Maybe (Article 'BlogPostKind)
     } ->
@@ -387,6 +439,7 @@ data Article kind where
       pubTalk :: Maybe String,
       pubSlides :: Maybe String,
       pubPoster :: Maybe String,
+      pubLicense :: Maybe LicenseInfo,
       pubPrev :: Maybe (Article 'PublicationKind),
       pubNext :: Maybe (Article 'PublicationKind)
     } ->
@@ -410,12 +463,14 @@ instance Binary (Article 'BlogPostKind) where
     put bpReadTime
     put bpGitHash
     put bpImage
+    put bpLicense
     put bpPrev
     put bpNext
   get :: Get.Get (Article BlogPostKind)
   get =
     BlogPost
       <$> get
+      <*> get
       <*> get
       <*> get
       <*> get
@@ -446,12 +501,14 @@ instance Binary (Article 'PublicationKind) where
     put pubTalk
     put pubSlides
     put pubPoster
+    put pubLicense
     put pubPrev
     put pubNext
   get :: Get.Get (Article PublicationKind)
   get =
     Publication
       <$> get
+      <*> get
       <*> get
       <*> get
       <*> get
@@ -483,6 +540,7 @@ instance A.ToJSON (Article 'BlogPostKind) where
         "readTime" A..= bpReadTime,
         "gitHash" A..= bpGitHash,
         "image" A..= bpImage,
+        "license" A..= bpLicense,
         "prev" A..= bpPrev,
         "next" A..= bpNext
       ]
@@ -507,6 +565,7 @@ instance A.ToJSON (Article 'PublicationKind) where
         "talk" A..= pubTalk,
         "slides" A..= pubSlides,
         "poster" A..= pubPoster,
+        "license" A..= pubLicense,
         "prev" A..= pubPrev,
         "next" A..= pubNext
       ]
@@ -525,6 +584,7 @@ instance A.FromJSON (Article 'BlogPostKind) where
         <*> o A..: "readTime"
         <*> o A..: "gitHash"
         <*> o A..:? "image"
+        <*> o A..:? "license"
         <*> o A..:? "prev"
         <*> o A..:? "next"
 
@@ -549,6 +609,7 @@ instance A.FromJSON (Article 'PublicationKind) where
         <*> o A..:? "talk"
         <*> o A..:? "slides"
         <*> o A..:? "poster"
+        <*> o A..:? "license"
         <*> o A..:? "prev"
         <*> o A..:? "next"
 
@@ -659,20 +720,54 @@ data FeedData = FeedData
   deriving stock (Generic, Eq, Ord, Show)
   deriving anyclass (A.ToJSON)
 
--- | build landing page
+data PageSpec = PageSpec
+  { srcPath :: FilePath,
+    templatePath :: FilePath,
+    outPath :: FilePath,
+    toHTML :: T.Text -> Action A.Value
+  }
+
+buildPage :: Config Identity -> PageSpec -> Action ()
+buildPage config (PageSpec src tpl out xform) =
+  cacheAction ("build" :: T.Text, src) $ do
+    raw <- readFile' src
+    body <- xform (T.pack raw)
+    tplH <- Slick.compileTemplate' tpl
+    gitHash <- getGitHash src >>= prettyGitHash config
+    let withGitHash = A._Object . at "gitHash" ?~ A.String (T.pack gitHash)
+        full = withSiteMeta config . withGitHash $ body
+        html = T.unpack $ Slick.substitute tplH full
+    writeFile' (runIdentity (outputFolder config) </> out) html
+
 buildIndex :: Config Identity -> Action ()
-buildIndex config = cacheAction ("build" :: T.Text, indexSrcPath) $ do
-  indexContent <- readFile' indexSrcPath
-  indexData <- markdownToHTML . T.pack $ indexContent
-  indexTemplate <- Slick.compileTemplate' "site/templates/index.html"
-  gitHash <- getGitHash indexSrcPath >>= prettyGitHash config
-  let withGitHash = A._Object . at "gitHash" ?~ A.String (T.pack gitHash)
-      fullIndexData = withSiteMeta config . withGitHash $ indexData
-      indexHTML = T.unpack $ Slick.substitute indexTemplate fullIndexData
-  writeFile' (runIdentity (outputFolder config) </> "index.html") indexHTML
-  where
-    indexSrcPath :: FilePath
-    indexSrcPath = "site/home.md"
+buildIndex cfg =
+  buildPage cfg $
+    PageSpec
+      { srcPath = "site/home.md",
+        templatePath = "site/templates/index.html",
+        outPath = "index.html",
+        toHTML = markdownToHTML
+      }
+
+buildTerms :: Config Identity -> Action ()
+buildTerms cfg =
+  buildPage cfg $
+    PageSpec
+      { srcPath = "site/terms.md",
+        templatePath = "site/templates/terms.html",
+        outPath = "terms.html",
+        toHTML = markdownToHTML
+      }
+
+buildContact :: Config Identity -> Action ()
+buildContact cfg =
+  buildPage cfg $
+    PageSpec
+      { srcPath = "site/Contact.lhs",
+        templatePath = "site/templates/contact.html",
+        outPath = "contact.html",
+        toHTML = codeToHTML
+      }
 
 -- | find and build all blog posts
 buildBlogPostList :: Config Identity -> Action [Article 'BlogPostKind]
@@ -707,7 +802,8 @@ buildBlogPost config postSrcPath = cacheAction ("build" :: T.Text, postSrcPath) 
       content = T.unpack $ fromMaybe mempty $ postData ^? A.key "content" . A._String
       withReadTime = A._Object . at "readTime" ?~ A.Integer (calcReadTime content)
       withGitHash = A._Object . at "gitHash" ?~ A.String (T.pack gitHash)
-      fullPostData = withReadTime . withGitHash . withPostUrl $ postData
+      withLicense = A._Object . at "license" ?~ A.toJSON (extractOrDefaultLicense postSrcPath postData)
+      fullPostData = withReadTime . withGitHash . withPostUrl . withLicense $ postData
   Slick.convert fullPostData
 
 -- | write blog post to file
@@ -747,7 +843,8 @@ buildPublication config publicationSrcPath = cacheAction ("build" :: T.Text, pub
   let publicationUrl = T.pack . dropDirectory1 $ publicationSrcPath -<.> "html"
       withPublicationUrl = A._Object . at "url" ?~ A.String publicationUrl
       withGitHash = A._Object . at "gitHash" ?~ A.String (T.pack gitHash)
-      fullPublicationData = withPublicationUrl . withGitHash $ publicationData
+      withLicense = A._Object . at "license" ?~ A.toJSON (extractOrDefaultLicense publicationSrcPath publicationData)
+      fullPublicationData = withPublicationUrl . withGitHash . withLicense $ publicationData
   Slick.convert fullPublicationData
 
 -- | write publication to file
@@ -805,21 +902,6 @@ calcReadTime = fromIntegral . uncurry roundUp . flip divMod 200 . length . words
   where
     roundUp mins secs = mins + if secs == 0 then 0 else 1
 
--- | build contact page
-buildContact :: Config Identity -> Action ()
-buildContact config = cacheAction ("build" :: T.Text, contactSrcPath) $ do
-  contactContent <- readFile' contactSrcPath
-  contactData <- codeToHTML . T.pack $ contactContent
-  contactTemplate <- Slick.compileTemplate' "site/templates/contact.html"
-  gitHash <- getGitHash contactSrcPath >>= prettyGitHash config
-  let withGitHash = A._Object . at "gitHash" ?~ A.String (T.pack gitHash)
-      fullContactData = withSiteMeta config . withGitHash $ contactData
-      contactHTML = T.unpack $ Slick.substitute contactTemplate fullContactData
-  writeFile' (runIdentity (outputFolder config) </> "contact.html") contactHTML
-  where
-    contactSrcPath :: FilePath
-    contactSrcPath = "site/Contact.lhs"
-
 -- | build resume page
 buildResume :: Config Identity -> Action ()
 buildResume config = cacheAction ("build" :: T.Text, resumeSrcPath) $ do
@@ -836,25 +918,25 @@ buildResume config = cacheAction ("build" :: T.Text, resumeSrcPath) $ do
   where
     resumeSrcPath :: FilePath
     resumeSrcPath = "site/resume.yaml"
-    
+
     addUrls (A.Object obj) = case KM.lookup "cv" obj of
       Just (A.Object cv) -> case KM.lookup "social_networks" cv of
-        Just (A.Array networks) -> 
+        Just (A.Array networks) ->
           let networks' = fmap addUrl networks
               cv' = KM.insert "social_networks" (A.Array networks') cv
-          in A.Object $ KM.insert "cv" (A.Object cv') obj
+           in A.Object $ KM.insert "cv" (A.Object cv') obj
         _ -> A.Object obj
       _ -> A.Object obj
     addUrls v = v
-    
+
     addUrl (A.Object net) = case (KM.lookup "network" net, KM.lookup "username" net) of
-      (Just (A.String "GitHub"), Just (A.String user)) -> 
+      (Just (A.String "GitHub"), Just (A.String user)) ->
         A.Object $ KM.insert "url" (A.String $ "https://github.com/" <> user) net
-      (Just (A.String "LinkedIn"), Just (A.String user)) -> 
+      (Just (A.String "LinkedIn"), Just (A.String user)) ->
         A.Object $ KM.insert "url" (A.String $ "https://linkedin.com/in/" <> user) net
-      (Just (A.String "X"), Just (A.String user)) -> 
+      (Just (A.String "X"), Just (A.String user)) ->
         A.Object $ KM.insert "url" (A.String $ "https://x.com/" <> user) net
-      (Just (A.String "Google Scholar"), Just (A.String user)) -> 
+      (Just (A.String "Google Scholar"), Just (A.String user)) ->
         A.Object $ KM.insert "url" (A.String $ "https://scholar.google.com/citations?user=" <> user) net
       _ -> A.Object net
     addUrl v = v
@@ -913,6 +995,7 @@ buildRules config = do
   buildTags config tags
   buildContact config
   buildResume config
+  buildTerms config
   copyStaticFiles config
   buildFeed config articles
 

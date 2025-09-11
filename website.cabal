@@ -69,10 +69,12 @@ executable website
     Contact
     Flattening
     OutsourcedAI
+    Quantity
     Unrecurse
 
   hs-source-dirs:
     app
+    lib
     site
     site/posts
 
@@ -93,14 +95,18 @@ test-suite tests
   type: exitcode-stdio-1.0
   hs-source-dirs:
     tests
-    app
+    lib
+    site/posts
 
   main-is: Spec.hs
   other-modules:
     Quantity
     QuantitySpec
+    OutsourcedAI
+    OutsourcedAISpec
 
   build-depends:
+    HUnit,
     QuickCheck,
     hspec,
     hspec-discover,

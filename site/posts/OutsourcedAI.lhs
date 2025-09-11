@@ -38,15 +38,27 @@ Below some boilerplate code for this module that you can skip over if you just w
       Unit,
       convert,
       one,
+      inUnit,
+      scalar,
       qCeiling,
       qFromIntegral,
       second,
+      hour,
+      month,
+      dollar,
       unit,
       (*@),
       (./),
+      qExp,
+      qScale,
+      qClamp,
     )
   import Data.Ord (clamp)
+  import Data.IntMap (update)
+  import Control.Lens.Internal.Zoom (EffectRWS)
   
+  type Scalar = Double
+
   -- import System.Directory   (getTemporaryDirectory)
   -- import System.FilePath    ((</>))
   -- import qualified Data.Text.IO as T
@@ -66,6 +78,7 @@ We are comparing two deployment strategies for enterprise use:
   data Deployment =
       External -- Use third-party APIs (OpenAI, Anthropic, etc.)
     | Internal -- Build and serve models in-house
+    deriving (Eq, Show)
 \end{code}
 
 Our primary goal is a simple, clear economic comparison:
@@ -76,15 +89,16 @@ To answer this, we use a simple macroeconomic model that balances two key quanti
 
 \begin{code}
   -- | Expected revenue (from successfully completed AI tasks)
-  type Revenue = Quantity Rational
+  type Revenue = Quantity Scalar
 
   -- | Operational cost (to perform AI tasks)
-  type Cost = Quantity Rational
+  type Cost = Quantity Scalar
 \end{code}
 
 A task is an abstract unit of AI work (e.g., a completed chat interaction, a document processed, typical of your business use case):
 
 \begin{code}
+  task :: Unit
   task = unit "task"
 \end{code}
 
@@ -102,20 +116,20 @@ For our macroeconomic treatment of platform AI economics, we make simplifying as
 The key economic differentiator between strategies is how the success rate and the cost structure evolve over time. We model this evolution explicitly as a time series:
 
 \begin{code}
-  type SuccessRate = Rational -- between 0 and 1 (0% to 100%)
-  type DataAdvantage = Rational -- between 0 and 1 (0% to 100%)
-  type Throughput = Quantity Rational -- tasks per second
+  type SuccessRate = Scalar -- dimensionless, between 0 and 1 (0% to 100%)
+  type DataAdvantage = Scalar -- dimensionless, between 0 and 1 (0% to 100%)
+  type Throughput = Quantity Scalar -- tasks per time unit
 \end{code}
 
 \begin{code}
   -- | Usage is the number of tasks per time unit
-  type Usage = Quantity Rational
+  type Usage = Quantity Scalar
 
   data State = State
-    { deployment :: Deployment -- ^ current deployment strategy
-    , usage :: Usage -- ^ current usage in tasks per second
-    , successRate :: SuccessRate  -- ^ current success rate
-    , dataAdvantage :: DataAdvantage -- ^ current data advantage
+    { deployment :: !Deployment -- ^ current deployment strategy
+    , usage :: !Usage -- ^ current usage in tasks per time unit
+    , successRate :: !SuccessRate  -- ^ current success rate (0 to 1)
+    , dataAdvantage :: !DataAdvantage -- ^ current data advantage (0 to 1)
     }
 
 \end{code}
@@ -128,18 +142,42 @@ A deployment strategy is a function that cleanly decouples decision-making from 
 
 \begin{code}
   data Exogenous = Exogenous
-    { externalCost :: Cost  -- ^ $ per task for external API
-    , externalSuccessRate :: SuccessRate -- ^ success rate for external API
-    , internalFixedCost :: Cost -- ^ fixed cost for internal deployment
-    , internalVariableCost :: Cost -- ^ cost per time unit per node for internal deployment
-    , internalThroughput :: Throughput -- ^ tasks per time unit per node for internal deployment
-    , internalBaseNodes :: Quantity Rational -- ^ always-on nodes for internal deployment
-    , marketCapacity :: Usage -- ^ maximum market size in tasks per time unit
+    { -- external
+      externalCost :: !Cost  -- ^ $ / task for external API
+    , externalSuccessRateCeiling :: !SuccessRate -- ^ success rate for external API (at asymptote)
+    , externalImprovementRate :: !(Quantity Scalar) -- ^ improvement rate for external API (1 / time unit)
+
+      -- internal cost structure
+    , internalFixedCost :: !Cost -- ^ internal fixed cost / time unit (R&D, baseline infra)
+    , internalVariableCost :: !Cost -- ^ cost / time unit / active node
+    , internalThroughput :: !Throughput -- ^ tasks / time unit / node
+    , internalBaseNodes :: !(Quantity Scalar) -- ^ minimum nodes kept warm
+    , internalSuccessRateCeiling :: !SuccessRate -- ^ success rate for internal model (at asymptote)
+    , internalLearningRate :: !(Quantity Scalar) -- ^ demand increase due to learning effects (1 / time unit)
+    , internalDataAccumulationRate :: !(Quantity Scalar) -- ^ data accumulation rate (1 / task)
+
+      -- demand side
+    , marketCapacity :: !Usage -- ^ maximum market size in tasks / time unit
+    , qualitySensitivity :: !Scalar -- ^ demand increase due to quality improvements
+    , qualitySuccessRateThreshold :: !SuccessRate -- ^ success rate threshold for demand increase
+    , profitabilitySensitivity :: !(Quantity Scalar) -- ^ demand increase due to profitability improvements (task / $)
+    , profitabilityMarginCap :: !Scalar -- ^ cap on margin effect to prevent runaway growth
+    , crowdingOutPressure :: !Scalar -- ^ demand reduction due to market saturation
+
+      -- cost drift
+    , driftExternalCost :: !(Quantity Scalar) -- ^ external cost drift (1 / time unit)
+    , driftInternalFixedCost :: !(Quantity Scalar) -- ^ internal fixed cost drift (1 / time unit)
+    , driftInternalVariableCost :: !(Quantity Scalar) -- ^ internal variable cost drift (1 / time unit)
+
+      -- financial
+    , discountRate :: !Scalar -- ^ discount rate for NPV calculations
     }
 \end{code}
 
 \begin{code}
-  -- expected revenue per task based on success rate
+  -- | Expected revenue per successful task.
+  -- Calibrate to a concrete use case.
+  -- Here: piecewise toy curve: 0 until 0.6, then linear; bonus after 0.9.
   expectedRevenue :: SuccessRate -> Revenue
   expectedRevenue successRate = (retention successRate) *@ dollar ./ task
     where
@@ -148,133 +186,231 @@ A deployment strategy is a function that cleanly decouples decision-making from 
                    | otherwise = 1.5 + 2 * (sr - 0.9)
 \end{code}
 
+Quality-Driven Demand
+---------------------
 
 Demand increase due to quality improvements models the idea that better outcomes directly attract more usage. When the success rate rises above a baseline threshold, customers are more likely to adopt the service, stick with it, and recommend it, which drives future demand. Below the threshold, improvements may have little effect on adoption, as the product is still perceived as unreliable.
 
 \begin{code}
-  -- demand increase due to quality improvements
-  qualityDrivenGrowth :: SuccessRate -> Rational
-  qualityDrivenGrowth successRate =
-    qualitySensitivity * (successRate - successRateThreshold)
-    where
-      qualitySensitivity = 0.2 -- how much demand increases with success rate
-      successRateThreshold = 0.6 -- success rate threshold for demand increase
+  -- | Demand increase due to quality improvements
+  qualityDrivenDemand :: Exogenous -> SuccessRate -> Scalar
+  qualityDrivenDemand Exogenous{..} successRate =
+    qualitySensitivity * (successRate - qualitySuccessRateThreshold)
 \end{code}
 
-The `qualitySensitivity` constant determines how strongly usage grows as success rate improves beyond the `successRateThreshold`. Above this threshold (set near the point where the product delivers consistently acceptable results, i.e. 0.6-0.7 for probabilistic AI systems) each 0.1 improvement in success rate typically yields an additional 1-3\% annual usage growth if `qualitySensitivity` is in the 0.1-0.3 range.
+The exogenous `qualitySensitivity` constant determines how strongly usage grows as success rate improves beyond the `qualitySuccessRateThreshold`. Above this threshold (set near the point where the product delivers consistently acceptable results, i.e. `0.6` to `0.7` for probabilistic AI systems) each `0.1` improvement in success rate typically yields an additional 1 to 3 percent annual usage growth if `qualitySensitivity` is in the `0.1` to `0.3` range.
 
-Usage change due to profitability captures the idea that healthy unit economics create both the means and the incentive to scale. When each unit of work generates a positive margin, a business can reinvest in marketing, infrastructure, and customer acquisition, which increases future usage. Conversely, negative margins force contraction—either by actively limiting work to high-value cases or through customer churn as prices rise or quality drops. In this way, profitability directly influences the rate at which demand grows or shrinks over time.
+Profitability-Driven Demand
+---------------------------
+
+Usage change due to profitability captures the idea that healthy unit economics create both the means and the incentive to scale. When each unit of work generates a positive margin, a business can reinvest in marketing, infrastructure, and customer acquisition, which increases future usage. Conversely, negative margins force contraction, either by actively limiting work to high-value cases or through customer churn as prices rise or quality drops. In this way, profitability directly influences the rate at which demand grows or shrinks over time.
 
 \begin{code}
-  -- usage change due to profitability
-  profitabilityDrivenGrowth :: Exogenous -> Usage -> Deployment -> SuccessRate -> Rational
-  profitabilityDrivenGrowth exogenous@Exogenous{..} usage deployment successRate =
-    clamp (- marginCap, marginCap) . unQ $ profitabilitySensitivity * margin
+  -- | Demand change due to profitability
+  profitabilityDrivenDemand :: Exogenous -> Usage -> Deployment -> SuccessRate -> Scalar
+  profitabilityDrivenDemand exogenous@Exogenous{..} usage deployment successRate =
+    clamp (- profitabilityMarginCap, profitabilityMarginCap) $ scalar (profitabilitySensitivity * margin)
     where
-      -- cost per task
+      -- cost / task
       cost = case deployment of
         External -> externalCost
         Internal -> internalCost exogenous usage / processingCapacity exogenous usage
 
-      -- margin per task
+      -- margin / task
       margin = expectedRevenue successRate - cost
-
-      profitabilitySensitivity = 5 *@ task ./ dollar -- how much demand increases with profitability
-      marginCap = 0.1 -- cap on margin effect to prevent runaway growth
 \end{code}
 
-The `profitabilitySensitivity`` constant controls how strongly margins translate into usage growth: if one step represents a year, values in the 0.05-0.2 range for \$0.01/task margin are typical. The `marginCap` should be low enough (e.g., 0.1 for ±10\%/year) to avoid implausibly large swings from a single year's profitability spike. With 0.1, extreme margins (e.g., ±\$0.05/task) still only change usage ±10\%/year, which is reasonable for a mature enterprise platform.
+The exogenous `profitabilitySensitivity` constant controls how strongly margins translate into usage growth: if one step represents a year, values in the `0.05` to `0.2` range for USD 0.01 per task margin are typical. The `profitabilityMarginCap` constant should be low enough (e.g., `0.1` for plus/minus 10 percent per year) to avoid implausibly large swings from a single year's profitability spike. With `0.1`, extreme margins (e.g., USD 0.05 per task) still only change usage 10 percent per year, which is reasonable for a mature enterprise platform.
+
+Market Saturation Effects
+-------------------------
 
 Demand reduction due to market saturation reflects the slowdown that occurs as usage approaches the total addressable capacity of the market. Early growth is easy when there are many untapped customers, but as adoption nears the market's limit, each additional unit of demand is harder to capture. This "crowding out" effect models the natural tapering of growth under saturation, where further expansion requires disproportionate effort and yields diminishing returns.
 
 \begin{code}
-  -- demand reduction due to market saturation
-  crowdingOut :: Exogenous -> Usage -> Rational
+  -- | Demand reduction due to market saturation
+  crowdingOut :: Exogenous -> Usage -> Scalar
   crowdingOut Exogenous{..} usage =
-    capacityPressure * unQ (usage / marketCapacity)
-    where
-      capacityPressure = 0.5 -- how much demand decreases with market saturation
+    crowdingOutPressure * scalar (usage / marketCapacity)
 \end{code}
 
-The `capacityPressure` constant sets the strength of this drag: a value near 1.0 ensures that growth falls to zero as we hit `marketCapacity`, producing a realistic plateau; smaller values let growth continue even past nominal capacity, and the plateau will be softer.
-Choosing `marketCapacity` so that the initial usage is only a few percent of capacity ensures saturation effects appear later in the simulation, not immediately.
+The exogenous `crowdingOutPressure` constant sets the strength of this drag: a value near `1.0` ensures that growth falls to zero as we hit `marketCapacity`, producing a realistic plateau. Smaller values let growth continue even past nominal capacity, and the plateau will be softer. Choosing `marketCapacity` so that the initial usage is only a few percent of capacity ensures saturation effects appear later in the simulation, not immediately.
 
-Putting this all together, we can define the demand update rule as follows:
+Usage Update Rule
+-----------------
+
+Putting this all together, we can define the usage update rule as follows:
 
 \begin{code}
-  -- demand update rule
-  updateUsage
-    :: Exogenous
-    -> State
-    -> Usage
-  updateUsage exogenous@Exogenous{..} State{..} =
-    clamp (0 *@ task ./ second, marketCapacity) $
-      usage * fromRational (1 + qualityDrivenGrowth successRate + profitabilityDrivenGrowth exogenous usage deployment successRate - crowdingOut exogenous usage)
+  -- | Usage update
+  updateUsage ::
+    Exogenous ->
+    State ->
+    Usage
+  updateUsage exogenous@Exogenous {..} State {..} =
+    let
+      q = qualityDrivenDemand exogenous successRate
+      p = profitabilityDrivenDemand exogenous usage deployment successRate
+      c = crowdingOut exogenous usage
+      factor = exp $ q + p - c
+    in qClamp (0 *@ task ./ second, marketCapacity) $ factor `qScale` usage
+\end{code}
+
+Learning Dynamics
+-----------------
+
+We distinguish two deployment modes:
+
+1. **External (exogenous improvement).**: Vendors do not learn from *our* traffic. Their models improve through global R&D, independent of our usage. We model this as a drift toward an asymptote `externalSuccessRateCeiling`, closing a fixed fraction of the remaining gap each time step to model diminishing returns. The `externalImprovementRate` controls how quickly this happens. This leads to a rapid initial improvement that slows as we approach the vendor's success rate. There is no `dataAdvantage` term here since external vendors do not learn from our data.
+
+2. **Internal (data flywheel).**: In-house deployment compounds proprietary signal. Each step, completed tasks contribute to a `dataAdvantage`. The more successful tasks are served, the more proprietary data is accumulated. This data advantage then accelerates improvements in success rate, with diminishing returns as we approach the upper bound `1`. This captures the slow start, rapid mid-phase, and natural plateau characteristic of internal learning curves.
+
+\begin{code}
+  -- | Learning update
+  updateLearning ::
+    Duration ->
+    Exogenous ->
+    State ->
+    (SuccessRate, DataAdvantage)
+  updateLearning dt Exogenous{..} State{..} =
+    case deployment of
+      External ->
+        -- asymptotic drift toward vendor's success rate
+        let improve = 1 - qExp (- externalImprovementRate * dt)
+            successRate' = clamp (0,1) $ successRate + improve * (externalSuccessRateCeiling - successRate)
+        in (successRate', dataAdvantage) -- no data advantage growth
+
+      Internal ->
+        -- saturating growth driven by accumulated advantage
+        let delta = clamp (0,1) $ scalar (internalDataAccumulationRate * usage * dt) * successRate
+            dataAdvantage' = clamp (0,1) $ dataAdvantage + (1 - dataAdvantage) * delta
+            improve = 1 - qExp (- internalLearningRate * dt)
+            successRate' = clamp (0,1) $ successRate + improve * dataAdvantage' * (internalSuccessRateCeiling - successRate)
+        in (successRate', dataAdvantage')
 \end{code}
 
 \begin{code}
-  updateRevenue
-    :: Exogenous
-    -> State
-    -> Revenue
-  updateRevenue exogenous State{..} = undefined
+  -- | Update the exogenous parameters over time (due to cost reductions)
+  updateExogenous ::
+    Duration ->
+    Exogenous ->
+    Exogenous
+  updateExogenous dt exogenous@Exogenous {..} = 
+    let fec = qExp (driftExternalCost * dt)
+        fifc = qExp (driftInternalFixedCost * dt)
+        fivc = qExp (driftInternalVariableCost * dt)
+        in exogenous
+          { externalCost = fec `qScale` externalCost
+          , internalFixedCost = fifc `qScale` internalFixedCost
+          , internalVariableCost = fivc `qScale` internalVariableCost
+          }
+\end{code}
 
-  updateProfit
-    :: Exogenous
-    -> State
-    -> Profit
-  updateProfit exogenous State{..} = undefined
+\begin{code}
+  type Time = Quantity Scalar
+  type Duration = Quantity Scalar
 
-  updateState
-    :: DeploymentStrategy
-    -> Exogenous
-    -> State
-    -> State
-  updateState deploymentStrategy exogenous State{..} = 
-    undefined
+  data Clock = Clock { now :: !Time, dt :: !Duration }
+\end{code}
 
+\begin{code}
+  -- | Update the state by one time step
+  step :: Clock -> Exogenous -> State -> (Exogenous, State)
+  step Clock{..} exogenous state@State{..} = 
+    let
+      exogenous' = updateExogenous dt exogenous
+      usage' = updateUsage exogenous' state
+      (successRate', dataAdvantage') = updateLearning dt exogenous' state
+      state' = state { usage = usage', successRate = successRate', dataAdvantage = dataAdvantage' }
+    in (exogenous', state')
+\end{code}
+
+\begin{code}
   simulate
     :: DeploymentStrategy
-    -> [Exogenous]
+    -> Clock
+    -> Exogenous
     -> State
-    -> [State]
-  simulate _ [] s = [s]
-  simulate strategy (e : es) s0 =
-    let s1 = updateState strategy e s0
-    in s1 : simulate strategy es s1
-  
+    -> [(Time, State)]
+  simulate strategy clock@Clock{..} exogenous state =
+    let deployment' = strategy exogenous state
+        state' = state { deployment = deployment' }
+        (exogenous', state'') = step clock exogenous state'
+        clock' = clock { now = now + dt }
+    in (now, state') : simulate strategy clock' exogenous' state''
+\end{code}
+
+\begin{code}
   alwaysExternal, alwaysInternal :: DeploymentStrategy
-  alwaysExternal _ = undefined
-  alwaysInternal _ = undefined
+  alwaysExternal _ _ = External
+  alwaysInternal _ _ = Internal
 
-  waitAndSee :: DeploymentStrategy
-  waitAndSee = undefined
-
-  -- Break-even strategy: switch to internal when profitable
-  -- and external when not profitable
+  -- | Break-even strategy: start external; switch to internal when (rev - c_int) > (rev - c_ext) + eps AND usage above threshold
   -- Problem: you need to know the future to do this optimally
   -- Problem: you may never break even if no investment in internal capabilities
   breakEven :: DeploymentStrategy
-  breakEven = undefined
+  breakEven exogenous@Exogenous{..} State{..}
+    | usage < thresholdUsage = External
+    | marginInternal > marginExternal + epsilon = Internal
+    | otherwise = External
+    where
+      thresholdUsage = 1.0e7 *@ task ./ second -- minimum usage to consider
+      epsilon = 0.01 *@ dollar ./ task -- minimum margin improvement to switch
+      revenue = expectedRevenue successRate * usage
+      marginInternal = revenue - internalCost exogenous usage
+      marginExternal = revenue - externalCost * usage
 
   -- total number of nodes needed to handle the given usage
-  totalNodes :: Exogenous -> Usage -> Quantity Rational
+  totalNodes :: Exogenous -> Usage -> Quantity Scalar
   totalNodes Exogenous {..} usage =
-    let neededNodes = qFromIntegral (qCeiling (usage / internalThroughput))
+    let neededNodes = qFromIntegral . qCeiling $ usage / internalThroughput
       in max internalBaseNodes neededNodes
 
   -- total processing capacity in tasks per time unit
-  processingCapacity :: Exogenous -> Usage -> Quantity Rational
-  processingCapacity exogenous@Exogenous{..} usage = internalThroughput * totalNodes exogenous usage
+  processingCapacity :: Exogenous -> Usage -> Quantity Scalar
+  processingCapacity exogenous@Exogenous{..} usage =
+    internalThroughput * totalNodes exogenous usage
 
   -- internal cost per time unit
   internalCost :: Exogenous -> Usage -> Cost
-  internalCost exogenous@Exogenous {..} usage = internalFixedCost + totalNodes exogenous usage * internalVariableCost
+  internalCost exogenous@Exogenous {..} usage =
+    internalFixedCost + totalNodes exogenous usage * internalVariableCost
 
-  type Profit = Quantity Rational
+  baseState :: State
+  baseState = State {
+    deployment = External,
+    usage = 5.0e8 *@ task ./ second,
+    successRate = 0.65,
+    dataAdvantage = 0
+  }
 
-  dollar :: Unit
-  dollar = unit "$"
+  baseExogenous :: Exogenous
+  baseExogenous = Exogenous {
+    externalCost = 0.02 *@ dollar ./ task,
+    externalSuccessRateCeiling = 0.75,
+    externalImprovementRate = 0.01 *@ one ./ month,
+
+    internalFixedCost = 120_000 *@ dollar ./ month,
+    internalVariableCost = 1.0e2 *@ dollar ./ hour ./ node,
+    internalThroughput = 1.0e6 *@ task ./ second ./ node,
+    internalBaseNodes = 1 *@ node,
+    internalSuccessRateCeiling = 0.90,
+    internalLearningRate = 0.05 *@ one ./ month,
+    internalDataAccumulationRate = 0.01 *@ one ./ task,
+
+    marketCapacity = 1.0e10 *@ task ./ second,
+    qualitySensitivity = 0.2,
+    qualitySuccessRateThreshold = 0.6,
+    profitabilitySensitivity = 5 *@ task ./ dollar,
+    profitabilityMarginCap = 0.1,
+    crowdingOutPressure = 0.5,
+
+    driftExternalCost = log 0.99 *@ one ./ month,
+    driftInternalFixedCost = log 1.005 *@ one ./ month,
+    driftInternalVariableCost = log 0.995 *@ one ./ month,
+
+    discountRate = 0.08
+  }
 
   node :: Unit
   node = unit "node"
