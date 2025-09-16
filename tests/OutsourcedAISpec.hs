@@ -28,28 +28,28 @@ spec = do
   describe "Quality-driven demand" $ do
     it "increases demand when success rate exceeds threshold" $ do
       let demand = qualityDrivenDemand baseExogenous 0.8
-      demand `shouldSatisfy` (> 0)
+      demand `shouldSatisfy` (> (0 *@ one ./ month))
       
     it "decreases demand when success rate is below threshold" $ do
       let demand = qualityDrivenDemand baseExogenous 0.4
-      demand `shouldSatisfy` (< 0)
+      demand `shouldSatisfy` (< (0 *@ one ./ month))
 
   describe "Profitability-driven demand" $ do
     it "increases demand with positive margins" $ do
       let state = baseState { successRate = 0.8, deployment = External }
       let demand = profitabilityDrivenDemand baseExogenous (usage state) (deployment state) (successRate state)
-      demand `shouldSatisfy` (> 0)
+      demand `shouldSatisfy` (> (0 *@ one ./ month))
 
   describe "Market saturation" $ do
     it "creates no crowding effect at low usage" $ do
       let lowUsage = 1.0e6 *@ task ./ second
       let crowd = crowdingOut baseExogenous lowUsage
-      crowd `shouldSatisfy` (\c -> abs c < 0.01)
+      crowd `shouldSatisfy` (\c -> abs c < (0.01 *@ one ./ month))
       
     it "creates significant crowding near capacity" $ do
       let highUsage = 9.0e9 *@ task ./ second
       let crowd = crowdingOut baseExogenous highUsage
-      crowd `shouldSatisfy` (> 0.4)
+      crowd `shouldSatisfy` (> (0.4 *@ one ./ month))
 
   describe "Learning dynamics" $ do
     it "improves external success rate over time" $ do
@@ -122,12 +122,14 @@ spec = do
   describe "Update functions" $ do
     it "updateUsage respects market capacity" $ do
       let state = baseState { usage = 9.9e9 *@ task ./ second }
-      let usage' = updateUsage baseExogenous state
+      let dt = 1 *@ month
+      let usage' = updateUsage dt baseExogenous state
       usage' `shouldSatisfy` (<= marketCapacity baseExogenous)
       
     it "updateUsage prevents negative usage" $ do
       let state = baseState { usage = 1 *@ task ./ second, successRate = 0.3 }
-      let usage' = updateUsage baseExogenous state
+      let dt = 1 *@ month
+      let usage' = updateUsage dt baseExogenous state
       usage' `shouldSatisfy` (>= (0 *@ task ./ second))
       
     it "updateExogenous applies cost drift" $ do
@@ -173,13 +175,15 @@ spec = do
     prop "usage stays non-negative" $ \sr ->
       let sr' = clamp (0, 1) sr
           state = baseState { successRate = sr' }
-          usage' = updateUsage baseExogenous state
+          dt = 1 *@ month
+          usage' = updateUsage dt baseExogenous state
       in magnitude usage' >= 0
     
     prop "usage respects market capacity" $ \sr ->
       let sr' = clamp (0, 1) sr
           state = baseState { successRate = sr', usage = 9.9e9 *@ task ./ second }
-          usage' = updateUsage baseExogenous state
+          dt = 1 *@ month
+          usage' = updateUsage dt baseExogenous state
       in usage' <= marketCapacity baseExogenous
 
   describe "Cost calculation properties" $ do

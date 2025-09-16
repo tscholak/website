@@ -54,8 +54,11 @@
 
     <div>
         {{#license}}
-        {{#url}}<a href="{{.}}">{{/url}}{{name}}{{#url}}</a>{{/url}}
-        {{#note}} — {{.}}{{/note}}
+        <h1>License</h1>
+        <p>
+            {{#url}}<a href="{{.}}">{{/url}}{{name}}{{#url}}</a>{{/url}}
+            {{#note}} — {{.}}{{/note}}
+        </p>
         {{/license}}
     </div>
 

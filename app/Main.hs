@@ -28,8 +28,8 @@ import Control.Lens (at, ix, (?~), (^?))
 import Control.Monad (void)
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import Data.Aeson (toJSON)
-import qualified Data.Aeson as A (Encoding, FromJSON (parseJSON), KeyValue ((.=)), Options (..), Result (Error, Success), ToJSON (toJSON), Value (..), decode', defaultOptions, fromJSON, genericParseJSON, genericToEncoding, genericToJSON, object, withObject, (.:), (.:?))
-import qualified Data.Aeson.KeyMap as KM (insert, lookup, mapMaybe, singleton, union)
+import qualified Data.Aeson as A (Encoding, FromJSON (parseJSON), KeyValue ((.=)), Options (..), Result (Error, Success), ToJSON (toJSON), Value (..), defaultOptions, fromJSON, genericParseJSON, genericToEncoding, genericToJSON, object, withObject, (.:), (.:?))
+import qualified Data.Aeson.KeyMap as KM (insert, lookup, union)
 import qualified Data.Aeson.Lens as A (AsValue (_Object, _String), key, pattern Integer)
 import qualified Data.Aeson.Parser.Internal as A (jsonEOF')
 import qualified Data.Attoparsec.ByteString as Atto
@@ -40,7 +40,7 @@ import Data.Either.Validation (Validation)
 import qualified Data.Either.Validation as Validation
 import Data.Functor.Compose (Compose (Compose))
 import Data.Functor.Identity (Identity (..))
-import Data.List (sortOn)
+import Data.List (isInfixOf, sortOn)
 import qualified Data.List as List
 import Data.List.NonEmpty (NonEmpty)
 import qualified Data.List.NonEmpty as NonEmpty
@@ -49,13 +49,10 @@ import qualified Data.Map.Lazy as Map
 import Data.Maybe (fromMaybe)
 import Data.Ord (Down (Down))
 import qualified Data.Text as T
-import qualified Data.Text.Lazy as TL
-import qualified Data.Text.Lazy.Encoding as TL
 import Data.Time (UTCTime, defaultTimeLocale, getCurrentTime, parseTimeOrError)
 import Data.Time.Format.ISO8601 (iso8601Show)
-import Data.Vector as V (mapMaybe)
 import qualified Data.Yaml as Yaml
-import Development.Shake (Action, ShakeOptions (..), cmd_, copyFileChanged, forP, getDirectoryFiles, readFile', shakeOptions, writeFile', pattern Chatty)
+import Development.Shake (Action, Exit (..), ShakeOptions (..), Stderr (..), Stdout (..), cmd, copyFileChanged, forP, getDirectoryFiles, putNormal, readFile', shakeOptions, writeFile', pattern Chatty)
 import Development.Shake.Classes (Binary (..))
 import Development.Shake.FilePath (dropDirectory1, takeExtension, (-<.>), (</>))
 import Development.Shake.Forward (cacheAction, shakeForward)
@@ -64,7 +61,7 @@ import Network.URI (URI (uriPath), parseURI)
 import qualified Options.Applicative as Options
 import qualified Slick (compileTemplate', convert, substitute)
 import qualified Slick.Pandoc as Slick (defaultHtml5Options, markdownToHTMLWithOpts)
-import System.Process (readProcess)
+import System.Exit (ExitCode (..))
 import Text.Casing (fromHumps, toQuietSnake)
 import qualified Text.Pandoc as Pandoc
 
@@ -140,9 +137,30 @@ codeOptions =
 codeToHTML :: T.Text -> Action A.Value
 codeToHTML = Slick.markdownToHTMLWithOpts codeOptions Slick.defaultHtml5Options
 
--- | compile and run code
+-- | compile and run code (if it has a main function)
 compileAndRunCode :: FilePath -> Action ()
-compileAndRunCode srcPath = cmd_ ("stack" :: String) [("runhaskell" :: String), srcPath]
+compileAndRunCode srcPath = do
+  let cmdLine =
+        unwords
+          [ "stack",
+            "exec",
+            "--",
+            "runhaskell",
+            "-ilib", -- lib directory to import path
+            "-isite/posts", -- posts directory for inter-module dependencies
+            srcPath
+          ]
+  (Exit code, Stdout (_out :: String), Stderr (err :: String)) <- cmd cmdLine
+  case code of
+    ExitSuccess -> pure ()
+    ExitFailure _ ->
+      if any
+        (`isInfixOf` err)
+        [ "not in scope: ‘main’",
+          "[GHC-76037]" -- present in recent GHCs for "not in scope"
+        ]
+        then putNormal $ "Skipping execution (no top-level main): " <> srcPath
+        else fail $ "Failed to run " <> srcPath <> ":\n" <> err
 
 -- | add site meta data to a JSON object
 withSiteMeta :: Config Identity -> A.Value -> A.Value
@@ -366,11 +384,12 @@ instance A.ToJSON LicenseInfo where toJSON = A.genericToJSON A.defaultOptions
 
 instance A.FromJSON LicenseInfo where
   parseJSON (A.Object o) =
-    LicenseInfo <$> o A..:  "name"
-                <*> o A..:? "url"
-                <*> o A..:? "note"
+    LicenseInfo
+      <$> o A..: "name"
+      <*> o A..:? "url"
+      <*> o A..:? "note"
   parseJSON (A.String s) =
-    pure LicenseInfo { name = T.unpack s, url = Nothing, note = Nothing }
+    pure LicenseInfo {name = T.unpack s, url = Nothing, note = Nothing}
   parseJSON _ = fail "LicenseInfo must be a string or object"
 
 instance Binary LicenseInfo where
@@ -385,25 +404,23 @@ defaultCCBY =
       note = Just "Please attribute \"Torsten Scholak\" with a link to the original."
     }
 
-extractOrDefaultLicense :: FilePath -> A.Value -> LicenseInfo
+extractOrDefaultLicense :: (A.AsValue s) => FilePath -> s -> LicenseInfo
 extractOrDefaultLicense src v =
-  withFallback (v ^? A.key "license" >>= resultToMaybe . A.fromJSON)
+  fromMaybe fallback (v ^? A.key "license" >>= asJSON)
   where
-    resultToMaybe (A.Success a) = Just a
-    resultToMaybe _ = Nothing
-    mergeNote a b = case (a, b) of
-      (Nothing, x) -> x
-      (x, Nothing) -> x
-      (Just x, Just y) -> Just (x <> " " <> y)
-    withFallback m =
-      case m of
-        Just li -> li
-        Nothing ->
-          let extra =
-                if takeExtension src == ".lhs"
-                  then Just "Code blocks are BSD-3-Clause unless noted."
-                  else Nothing
-           in defaultCCBY {note = mergeNote (note defaultCCBY) extra}
+    asJSON x = case A.fromJSON x of
+      A.Success a -> Just a
+      _ -> Nothing
+    lhsNote p
+      | takeExtension p == ".lhs" = Just "Code blocks are BSD-3-Clause unless noted."
+      | otherwise = Nothing
+    fallback =
+      defaultCCBY
+        { note = case (note defaultCCBY, lhsNote src) of
+            (Nothing, b) -> b
+            (a, Nothing) -> a
+            (Just a, Just b) -> Just (a <> " " <> b)
+        }
 
 -- | data type for articles
 data Article kind where
@@ -793,7 +810,7 @@ buildBlogPost config postSrcPath = cacheAction ("build" :: T.Text, postSrcPath) 
   postData <- case takeExtension postSrcPath of
     ".md" -> markdownToHTML . T.pack $ postContent
     ".lhs" -> do
-      -- compileAndRunCode postSrcPath
+      compileAndRunCode postSrcPath
       codeToHTML . T.pack $ postContent
     _ -> fail "Expected .md or .lhs"
   gitHash <- getGitHash postSrcPath >>= prettyGitHash config
@@ -1005,9 +1022,18 @@ data GitHash = GitHash {gitHash :: String, gitDate :: String, gitAuthor :: Strin
 
 -- | get git hash of last commit of a file
 getGitHash :: FilePath -> Action GitHash
-getGitHash path =
-  let cmd format = readProcess "git" ["log", "--pretty=format:" <> format, "-n", "1", "--", path] ""
-   in liftIO $ GitHash <$> cmd "%h" <*> cmd "%ci" <*> cmd "%an" <*> cmd "%s"
+getGitHash path = do
+  let cmdLine = unwords
+        [ "git"
+        , "log"
+        , "--pretty=format:%h%n%ci%n%an%n%s"
+        , "-n", "1"
+        , "--", path
+        ]
+  Stdout (gitInfo :: String) <- cmd cmdLine
+  case lines gitInfo of
+    [hash, date, author, subject] -> pure $ GitHash hash date author subject
+    _ -> fail $ "Unexpected git log output for " ++ path
 
 -- | pretty print git hash with link to GitHub commit
 prettyGitHash :: Config Identity -> GitHash -> Action String

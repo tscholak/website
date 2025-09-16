@@ -5,6 +5,7 @@ teaser: |
   Enterprises are told they have to choose between cost or differentiation. But that's a false choice. If you outsource all AI, your costs stay volatile and your upside is capped. The winners will own enough of the stack to control both unit cost and quality.
 tags:
   items: [ai, strategy, economics]
+image: moat-for-rent.png
 ---
 
 ## The false choice

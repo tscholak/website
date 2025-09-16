@@ -54,9 +54,10 @@ Below some boilerplate code for this module that you can skip over if you just w
       qClamp,
     )
   import Data.Ord (clamp)
-  import Data.IntMap (update)
-  import Control.Lens.Internal.Zoom (EffectRWS)
-  
+  import Graphics.Rendering.Chart.Easy
+  import Graphics.Rendering.Chart.Backend.Diagrams
+  import Control.Monad (forM_)
+
   type Scalar = Double
 
   -- import System.Directory   (getTemporaryDirectory)
@@ -158,11 +159,11 @@ A deployment strategy is a function that cleanly decouples decision-making from 
 
       -- demand side
     , marketCapacity :: !Usage -- ^ maximum market size in tasks / time unit
-    , qualitySensitivity :: !Scalar -- ^ demand increase due to quality improvements
+    , qualitySensitivity :: !(Quantity Scalar) -- ^ demand increase due to quality improvements (1 / time unit)
     , qualitySuccessRateThreshold :: !SuccessRate -- ^ success rate threshold for demand increase
-    , profitabilitySensitivity :: !(Quantity Scalar) -- ^ demand increase due to profitability improvements (task / $)
-    , profitabilityMarginCap :: !Scalar -- ^ cap on margin effect to prevent runaway growth
-    , crowdingOutPressure :: !Scalar -- ^ demand reduction due to market saturation
+    , profitabilitySensitivity :: !(Quantity Scalar) -- ^ demand increase due to profitability improvements (task / $ / time unit)
+    , profitabilityMarginCap :: !(Quantity Scalar) -- ^ cap on margin effect to prevent runaway growth (1 / time unit)
+    , crowdingOutPressure :: !(Quantity Scalar) -- ^ demand reduction due to market saturation (1 / time unit)
 
       -- cost drift
     , driftExternalCost :: !(Quantity Scalar) -- ^ external cost drift (1 / time unit)
@@ -193,9 +194,9 @@ Demand increase due to quality improvements models the idea that better outcomes
 
 \begin{code}
   -- | Demand increase due to quality improvements
-  qualityDrivenDemand :: Exogenous -> SuccessRate -> Scalar
+  qualityDrivenDemand :: Exogenous -> SuccessRate -> Quantity Scalar
   qualityDrivenDemand Exogenous{..} successRate =
-    qualitySensitivity * (successRate - qualitySuccessRateThreshold)
+    (successRate - qualitySuccessRateThreshold) `qScale` qualitySensitivity
 \end{code}
 
 The exogenous `qualitySensitivity` constant determines how strongly usage grows as success rate improves beyond the `qualitySuccessRateThreshold`. Above this threshold (set near the point where the product delivers consistently acceptable results, i.e. `0.6` to `0.7` for probabilistic AI systems) each `0.1` improvement in success rate typically yields an additional 1 to 3 percent annual usage growth if `qualitySensitivity` is in the `0.1` to `0.3` range.
@@ -207,16 +208,13 @@ Usage change due to profitability captures the idea that healthy unit economics 
 
 \begin{code}
   -- | Demand change due to profitability
-  profitabilityDrivenDemand :: Exogenous -> Usage -> Deployment -> SuccessRate -> Scalar
+  profitabilityDrivenDemand :: Exogenous -> Usage -> Deployment -> SuccessRate -> Quantity Scalar
   profitabilityDrivenDemand exogenous@Exogenous{..} usage deployment successRate =
-    clamp (- profitabilityMarginCap, profitabilityMarginCap) $ scalar (profitabilitySensitivity * margin)
+    qClamp (- profitabilityMarginCap, profitabilityMarginCap) $ profitabilitySensitivity * margin
     where
-      -- cost / task
       cost = case deployment of
         External -> externalCost
         Internal -> internalCost exogenous usage / processingCapacity exogenous usage
-
-      -- margin / task
       margin = expectedRevenue successRate - cost
 \end{code}
 
@@ -229,9 +227,9 @@ Demand reduction due to market saturation reflects the slowdown that occurs as u
 
 \begin{code}
   -- | Demand reduction due to market saturation
-  crowdingOut :: Exogenous -> Usage -> Scalar
+  crowdingOut :: Exogenous -> Usage -> Quantity Scalar
   crowdingOut Exogenous{..} usage =
-    crowdingOutPressure * scalar (usage / marketCapacity)
+    crowdingOutPressure * usage / marketCapacity
 \end{code}
 
 The exogenous `crowdingOutPressure` constant sets the strength of this drag: a value near `1.0` ensures that growth falls to zero as we hit `marketCapacity`, producing a realistic plateau. Smaller values let growth continue even past nominal capacity, and the plateau will be softer. Choosing `marketCapacity` so that the initial usage is only a few percent of capacity ensures saturation effects appear later in the simulation, not immediately.
@@ -244,15 +242,16 @@ Putting this all together, we can define the usage update rule as follows:
 \begin{code}
   -- | Usage update
   updateUsage ::
+    Duration ->
     Exogenous ->
     State ->
     Usage
-  updateUsage exogenous@Exogenous {..} State {..} =
+  updateUsage dt exogenous@Exogenous {..} State {..} =
     let
       q = qualityDrivenDemand exogenous successRate
       p = profitabilityDrivenDemand exogenous usage deployment successRate
       c = crowdingOut exogenous usage
-      factor = exp $ q + p - c
+      factor = qExp $ (q + p - c) * dt
     in qClamp (0 *@ task ./ second, marketCapacity) $ factor `qScale` usage
 \end{code}
 
@@ -319,25 +318,10 @@ We distinguish two deployment modes:
   step Clock{..} exogenous state@State{..} = 
     let
       exogenous' = updateExogenous dt exogenous
-      usage' = updateUsage exogenous' state
+      usage' = updateUsage dt exogenous' state
       (successRate', dataAdvantage') = updateLearning dt exogenous' state
       state' = state { usage = usage', successRate = successRate', dataAdvantage = dataAdvantage' }
     in (exogenous', state')
-\end{code}
-
-\begin{code}
-  simulate
-    :: DeploymentStrategy
-    -> Clock
-    -> Exogenous
-    -> State
-    -> [(Time, State)]
-  simulate strategy clock@Clock{..} exogenous state =
-    let deployment' = strategy exogenous state
-        state' = state { deployment = deployment' }
-        (exogenous', state'') = step clock exogenous state'
-        clock' = clock { now = now + dt }
-    in (now, state') : simulate strategy clock' exogenous' state''
 \end{code}
 
 \begin{code}
@@ -351,11 +335,12 @@ We distinguish two deployment modes:
   breakEven :: DeploymentStrategy
   breakEven exogenous@Exogenous{..} State{..}
     | usage < thresholdUsage = External
-    | marginInternal > marginExternal + epsilon = Internal
+    | marginInternal > marginExternal + epsilonPerTime = Internal
     | otherwise = External
     where
       thresholdUsage = 1.0e7 *@ task ./ second -- minimum usage to consider
-      epsilon = 0.01 *@ dollar ./ task -- minimum margin improvement to switch
+      epsilonPerTask = 0.01 *@ dollar ./ task -- minimum margin improvement to switch
+      epsilonPerTime = epsilonPerTask * usage
       revenue = expectedRevenue successRate * usage
       marginInternal = revenue - internalCost exogenous usage
       marginExternal = revenue - externalCost * usage
@@ -399,11 +384,11 @@ We distinguish two deployment modes:
     internalDataAccumulationRate = 0.01 *@ one ./ task,
 
     marketCapacity = 1.0e10 *@ task ./ second,
-    qualitySensitivity = 0.2,
+    qualitySensitivity = 0.2 *@ one ./ month,
     qualitySuccessRateThreshold = 0.6,
-    profitabilitySensitivity = 5 *@ task ./ dollar,
-    profitabilityMarginCap = 0.1,
-    crowdingOutPressure = 0.5,
+    profitabilitySensitivity = 5 *@ task ./ dollar ./ month,
+    profitabilityMarginCap = 0.1 *@ one ./ month,
+    crowdingOutPressure = 0.5 *@ one ./ month,
 
     driftExternalCost = log 0.99 *@ one ./ month,
     driftInternalFixedCost = log 1.005 *@ one ./ month,
@@ -414,4 +399,147 @@ We distinguish two deployment modes:
 
   node :: Unit
   node = unit "node"
+\end{code}
+
+\begin{code}
+  data Row = Row
+    { time :: !Time,
+      deploymentBeforeStep :: !Deployment,
+      -- | tasks / time
+      usageTasksPerTimeBeforeStep :: !Usage,
+      -- | 0..1
+      successRateBeforeStep :: !SuccessRate,
+      -- | 0..1
+      dataAdvantageBeforeStep :: !DataAdvantage,
+      -- | \$ / task
+      unitCostPerTask :: !(Quantity Scalar),
+      -- | \$ / time
+      revenuePerTime :: !(Quantity Scalar),
+      -- | \$ / time
+      costPerTime :: !(Quantity Scalar),
+      -- | \$ / time
+      profitPerTime :: !(Quantity Scalar),
+      -- | \$ over this dt
+      periodProfit :: !(Quantity Scalar),
+      -- | discounted $
+      presentValueOfPeriodProfit :: !(Quantity Scalar),
+      -- | discounted $, cumulative
+      cumulativePresentValueOfProfit :: !(Quantity Scalar)
+    }
+    deriving (Show)
+\end{code}
+
+\begin{code}
+  simulate
+    :: DeploymentStrategy
+    -> Clock
+    -> Exogenous
+    -> State
+    -> [Row]
+  simulate strategy clock0 exogenous0 state0 =
+    go (0 *@ dollar) clock0 exogenous0 state0
+    where
+      go :: Quantity Scalar -> Clock -> Exogenous -> State -> [Row]
+      go cumulativePresentValue clock@Clock{..} exogenous state =
+        let deploymentChosen       = strategy exogenous state
+            stateBeforeStep        = state { deployment = deploymentChosen }
+            usageTasksPerTimeBeforeStep = usage stateBeforeStep
+            successRateBeforeStep  = successRate stateBeforeStep
+            dataAdvantageBeforeStep = dataAdvantage stateBeforeStep
+
+            revenuePerTime            = expectedRevenue successRateBeforeStep * usageTasksPerTimeBeforeStep
+            costPerTime               = case deploymentChosen of
+                                      External -> externalCost exogenous * usageTasksPerTimeBeforeStep
+                                      Internal -> internalCost exogenous usageTasksPerTimeBeforeStep
+            profitRate             = revenuePerTime - costPerTime
+            periodProfit      = profitRate * dt
+
+            -- discountRate is treated as ANNUAL continuous; convert months -> years
+            yearsSinceStart        = inUnit now month / 12.0
+            discountFactor         = exp ( - discountRate exogenous * yearsSinceStart )
+            presentValueOfPeriodProfit  = discountFactor `qScale` periodProfit
+            cumulativePresentValueOfProfit          = cumulativePresentValue + presentValueOfPeriodProfit
+
+            unitCostThisPeriod     = case deploymentChosen of
+                                      External -> externalCost exogenous
+                                      Internal -> internalCost exogenous usageTasksPerTimeBeforeStep
+                                                  / processingCapacity exogenous usageTasksPerTimeBeforeStep
+
+            row = Row
+              { time                                   = now
+              , deploymentBeforeStep                   = deploymentChosen
+              , usageTasksPerTimeBeforeStep            = usageTasksPerTimeBeforeStep
+              , successRateBeforeStep                  = successRateBeforeStep
+              , dataAdvantageBeforeStep                = dataAdvantageBeforeStep
+              , unitCostPerTask                        = unitCostThisPeriod
+              , revenuePerTime                         = revenuePerTime
+              , costPerTime                            = costPerTime
+              , profitPerTime                          = profitRate
+              , periodProfit                           = periodProfit
+              , presentValueOfPeriodProfit             = presentValueOfPeriodProfit
+              , cumulativePresentValueOfProfit         = cumulativePresentValueOfProfit
+              }
+
+            (exogenous', state')   = step clock exogenous stateBeforeStep
+            clock'                 = clock { now = now + dt }
+        in row : go cumulativePresentValueOfProfit clock' exogenous' state'
+\end{code}
+
+\begin{code}
+  pointsSuccessRateBeforeStep :: [Row] -> [(Scalar, Scalar)]
+  pointsSuccessRateBeforeStep =
+    map (\Row{..} -> (inUnit time month, successRateBeforeStep))
+
+  pointsUnitCostPerTask :: [Row] -> [(Scalar, Scalar)]
+  pointsUnitCostPerTask =
+    map (\Row{..} -> (inUnit time month, inUnit unitCostPerTask (dollar ./ task)))
+
+  pointsCumulativePresentValueOfProfit :: [Row] -> [(Scalar, Scalar)]
+  pointsCumulativePresentValueOfProfit =
+    map (\Row{..} -> (inUnit time month, inUnit cumulativePresentValueOfProfit dollar))
+
+  horizonMonths :: Int
+  horizonMonths = 60
+
+  monthlyClock :: Clock
+  monthlyClock = Clock { now = 0 *@ month, dt = 1 *@ month }
+
+  main :: IO ()
+  main = do
+    let strategies =
+          [ ("alwaysExternal", alwaysExternal)
+          , ("alwaysInternal", alwaysInternal)
+          , ("breakEven",      breakEven)
+          ]
+
+        takeH (name, strat) =
+          (name, take horizonMonths (simulate strat monthlyClock baseExogenous baseState))
+
+        runs = map takeH strategies
+
+        fileOptions = FileOptions (800, 600) SVG loadSansSerifFonts
+
+    -- Success rate plot
+    toFile fileOptions "success_rate.svg" $ do
+      layout_title .= "Success Rate over Time"
+      layout_x_axis . laxis_title .= "Month"
+      layout_y_axis . laxis_title .= "Success rate"
+      forM_ runs $ \(name, rows) ->
+        plot (line name [pointsSuccessRateBeforeStep rows])
+
+    -- Unit cost plot
+    toFile fileOptions "unit_cost_per_task.svg" $ do
+      layout_title .= "Unit Cost per Task ($)"
+      layout_x_axis . laxis_title .= "Month"
+      layout_y_axis . laxis_title .= "USD per task"
+      forM_ runs $ \(name, rows) ->
+        plot (line name [pointsUnitCostPerTask rows])
+
+    -- Cumulative NPV plot
+    toFile fileOptions "cumulative_present_value_of_profit.svg" $ do
+      layout_title .= "Cumulative Present Value of Profit ($)"
+      layout_x_axis . laxis_title .= "Month"
+      layout_y_axis . laxis_title .= "USD"
+      forM_ runs $ \(name, rows) ->
+        plot (line name [pointsCumulativePresentValueOfProfit rows])
 \end{code}

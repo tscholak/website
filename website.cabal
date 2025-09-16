@@ -26,6 +26,8 @@ custom-setup
 common shared-properties
   default-language: Haskell2010
   build-depends:
+    Chart,
+    Chart-diagrams,
     aeson,
     attoparsec,
     attoparsec-aeson,
@@ -100,10 +102,10 @@ test-suite tests
 
   main-is: Spec.hs
   other-modules:
-    Quantity
-    QuantitySpec
     OutsourcedAI
     OutsourcedAISpec
+    Quantity
+    QuantitySpec
 
   build-depends:
     HUnit,

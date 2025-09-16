@@ -4,9 +4,10 @@ This site is personal. Content is provided "as is" with no warranties or guarant
 
 ### Licensing
 
-- **Text and images:** All rights reserved.
-- **Code snippets:** MIT unless noted.
+- **Text and images:** [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) unless stated otherwise.  
+- **Code:** [BSD-3-Clause](https://opensource.org/license/bsd-3-clause/) unless stated otherwise.  
 
+Some pages may specify a different license. When they do, that license takes full precedence.
 If you reuse anything, attribute "Torsten Scholak" and link back.
 
 ### External links

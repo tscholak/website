@@ -5,6 +5,50 @@
 , ...
 }:
 
+let
+  fsatrace = pkgs.stdenv.mkDerivation {
+    pname = "fsatrace";
+    version = "0-unstable-2025-09-12";
+
+    src = pkgs.fetchFromGitHub {
+      owner = "jacereda";
+      repo = "fsatrace";
+      rev = "4d4a967293eed5bd2a0298c5be6858e3f7fccb28";
+      sha256 = "sha256-JSj9iyOAK1KEUn2pwEGHzAlkkquUtq57UmTJxwazsmM=";
+    };
+
+    nativeBuildInputs =
+      [ pkgs.gnumake ]
+      ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [ pkgs.clang pkgs.darwin.cctools ];
+
+    buildPhase = "make";
+
+    installPhase = ''
+      mkdir -p "$out/bin" "$out/lib"
+      # main tracer
+      install -Dm755 ./fsatrace "$out/bin/fsatrace"
+
+      # injector(s): keep next to the binary and also in lib
+      if [ -f ./fsatrace.so ]; then
+        install -Dm755 ./fsatrace.so "$out/bin/fsatrace.so"
+        install -Dm755 ./fsatrace.so "$out/lib/fsatrace.so"
+      fi
+
+      for d in *.dylib; do
+        if [ -f "$d" ]; then
+          install -Dm755 "./$d" "$out/bin/$d"
+          install -Dm755 "./$d" "$out/lib/$d"
+        fi
+      done
+    '';
+
+    meta = with pkgs.lib; {
+      description = "Filesystem access tracer (needed by Shake Forward)";
+      license = licenses.isc;
+      platforms = platforms.unix;
+    };
+  };
+in
 {
   cachix.push = "tscholak";
 
@@ -16,6 +60,7 @@
     pkgs.nodePackages.serve
     pkgs.watchexec
     pkgs.check-jsonschema
+    fsatrace
   ];
 
   languages.haskell = {
