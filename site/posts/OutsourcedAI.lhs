@@ -45,6 +45,7 @@ Below some boilerplate code for this module that you can skip over if you just w
       second,
       hour,
       month,
+      year,
       dollar,
       unit,
       (*@),
@@ -171,7 +172,7 @@ A deployment strategy is a function that cleanly decouples decision-making from 
     , driftInternalVariableCost :: !(Quantity Scalar) -- ^ internal variable cost drift (1 / time unit)
 
       -- financial
-    , discountRate :: !Scalar -- ^ discount rate for NPV calculations
+    , discountPerStep :: !Scalar -- ^ discount rate for NPV calculations 
     }
 \end{code}
 
@@ -369,33 +370,30 @@ We distinguish two deployment modes:
     dataAdvantage = 0
   }
 
-  baseExogenous :: Exogenous
-  baseExogenous = Exogenous {
-    externalCost = 0.02 *@ dollar ./ task,
-    externalSuccessRateCeiling = 0.75,
-    externalImprovementRate = 0.01 *@ one ./ month,
-
-    internalFixedCost = 120_000 *@ dollar ./ month,
-    internalVariableCost = 1.0e2 *@ dollar ./ hour ./ node,
-    internalThroughput = 1.0e6 *@ task ./ second ./ node,
-    internalBaseNodes = 1 *@ node,
-    internalSuccessRateCeiling = 0.90,
-    internalLearningRate = 0.05 *@ one ./ month,
-    internalDataAccumulationRate = 0.01 *@ one ./ task,
-
-    marketCapacity = 1.0e10 *@ task ./ second,
-    qualitySensitivity = 0.2 *@ one ./ month,
-    qualitySuccessRateThreshold = 0.6,
-    profitabilitySensitivity = 5 *@ task ./ dollar ./ month,
-    profitabilityMarginCap = 0.1 *@ one ./ month,
-    crowdingOutPressure = 0.5 *@ one ./ month,
-
-    driftExternalCost = log 0.99 *@ one ./ month,
-    driftInternalFixedCost = log 1.005 *@ one ./ month,
-    driftInternalVariableCost = log 0.995 *@ one ./ month,
-
-    discountRate = 0.08
-  }
+  baseExogenousFor :: Duration -> Exogenous
+  baseExogenousFor dt =
+    Exogenous
+      { externalCost = 0.02 *@ dollar ./ task,
+        externalSuccessRateCeiling = 0.75,
+        externalImprovementRate = 0.01 *@ one ./ month,
+        internalFixedCost = 120_000 *@ dollar ./ month,
+        internalVariableCost = 1.0e2 *@ dollar ./ hour ./ node,
+        internalThroughput = 1.0e6 *@ task ./ second ./ node,
+        internalBaseNodes = 1 *@ node,
+        internalSuccessRateCeiling = 0.90,
+        internalLearningRate = 0.05 *@ one ./ month,
+        internalDataAccumulationRate = 0.01 *@ one ./ task,
+        marketCapacity = 1.0e10 *@ task ./ second,
+        qualitySensitivity = 0.2 *@ one ./ month,
+        qualitySuccessRateThreshold = 0.6,
+        profitabilitySensitivity = 5 *@ task ./ dollar ./ month,
+        profitabilityMarginCap = 0.1 *@ one ./ month,
+        crowdingOutPressure = 0.5 *@ one ./ month,
+        driftExternalCost = log 0.99 *@ one ./ month,
+        driftInternalFixedCost = log 1.005 *@ one ./ month,
+        driftInternalVariableCost = log 0.995 *@ one ./ month,
+        discountPerStep = let annualDiscountRate = 0.08 in exp (-annualDiscountRate * (inUnit dt year))
+      }
 
   node :: Unit
   node = unit "node"
@@ -406,7 +404,7 @@ We distinguish two deployment modes:
     { time :: !Time,
       deploymentBeforeStep :: !Deployment,
       -- | tasks / time
-      usageTasksPerTimeBeforeStep :: !Usage,
+      usageBeforeStep :: !Usage,
       -- | 0..1
       successRateBeforeStep :: !SuccessRate,
       -- | 0..1
@@ -414,75 +412,75 @@ We distinguish two deployment modes:
       -- | \$ / task
       unitCostPerTask :: !(Quantity Scalar),
       -- | \$ / time
-      revenuePerTime :: !(Quantity Scalar),
+      revenueRate :: !(Quantity Scalar),
       -- | \$ / time
-      costPerTime :: !(Quantity Scalar),
+      costRate :: !(Quantity Scalar),
       -- | \$ / time
-      profitPerTime :: !(Quantity Scalar),
+      profitRate :: !(Quantity Scalar),
       -- | \$ over this dt
-      periodProfit :: !(Quantity Scalar),
+      cashFlowForPeriod :: !(Quantity Scalar),
       -- | discounted $
-      presentValueOfPeriodProfit :: !(Quantity Scalar),
+      presentValueOfCashFlowForPeriod :: !(Quantity Scalar),
       -- | discounted $, cumulative
-      cumulativePresentValueOfProfit :: !(Quantity Scalar)
+      cumulativePresentValueOfCashFlow :: !(Quantity Scalar)
     }
     deriving (Show)
 \end{code}
 
 \begin{code}
-  simulate
-    :: DeploymentStrategy
-    -> Clock
-    -> Exogenous
-    -> State
-    -> [Row]
+  simulate ::
+    DeploymentStrategy ->
+    Clock ->
+    Exogenous ->
+    State ->
+    [Row]
   simulate strategy clock0 exogenous0 state0 =
-    go (0 *@ dollar) clock0 exogenous0 state0
+    go (0 *@ dollar) clock0 1 exogenous0 state0
     where
-      go :: Quantity Scalar -> Clock -> Exogenous -> State -> [Row]
-      go cumulativePresentValue clock@Clock{..} exogenous state =
-        let deploymentChosen       = strategy exogenous state
-            stateBeforeStep        = state { deployment = deploymentChosen }
-            usageTasksPerTimeBeforeStep = usage stateBeforeStep
-            successRateBeforeStep  = successRate stateBeforeStep
-            dataAdvantageBeforeStep = dataAdvantage stateBeforeStep
+      go ::
+        Quantity Scalar ->
+        Clock ->
+        Scalar ->
+        Exogenous ->
+        State ->
+        [Row]
+      go cumulativePresentValueBeforeStep clockBeforeStep@Clock {..} discountMultiplierBeforeStep exogenousBeforeStep stateBeforeStep =
+        let -- decide deployment for this step. state is still "before step"
+            deploymentBeforeStep = strategy exogenousBeforeStep stateBeforeStep
+            stateBeforeStep' = stateBeforeStep {deployment = deploymentBeforeStep}
 
-            revenuePerTime            = expectedRevenue successRateBeforeStep * usageTasksPerTimeBeforeStep
-            costPerTime               = case deploymentChosen of
-                                      External -> externalCost exogenous * usageTasksPerTimeBeforeStep
-                                      Internal -> internalCost exogenous usageTasksPerTimeBeforeStep
-            profitRate             = revenuePerTime - costPerTime
-            periodProfit      = profitRate * dt
+            -- snapshot some "before step" observables we want to emit in the Row
+            time = now
+            usageBeforeStep = usage stateBeforeStep'
+            successRateBeforeStep = successRate stateBeforeStep'
+            dataAdvantageBeforeStep = dataAdvantage stateBeforeStep'
 
-            -- discountRate is treated as ANNUAL continuous; convert months -> years
-            yearsSinceStart        = inUnit now month / 12.0
-            discountFactor         = exp ( - discountRate exogenous * yearsSinceStart )
-            presentValueOfPeriodProfit  = discountFactor `qScale` periodProfit
-            cumulativePresentValueOfProfit          = cumulativePresentValue + presentValueOfPeriodProfit
+            -- per-time economics for this step
+            revenueRate = expectedRevenue successRateBeforeStep * usageBeforeStep
+            costRate = case deploymentBeforeStep of
+              External -> externalCost exogenousBeforeStep * usageBeforeStep
+              Internal -> internalCost exogenousBeforeStep usageBeforeStep
+            profitRate = revenueRate - costRate
 
-            unitCostThisPeriod     = case deploymentChosen of
-                                      External -> externalCost exogenous
-                                      Internal -> internalCost exogenous usageTasksPerTimeBeforeStep
-                                                  / processingCapacity exogenous usageTasksPerTimeBeforeStep
+            -- cash flow and NPV for this step
+            cashFlowForPeriod = profitRate * dt
+            averageDiscountWithinStep = (1 - discountPerStep exogenousBeforeStep) / (- log (discountPerStep exogenousBeforeStep))
+            presentValueOfCashFlowForPeriod = (discountMultiplierBeforeStep * averageDiscountWithinStep) `qScale` cashFlowForPeriod
+            cumulativePresentValueOfCashFlow = cumulativePresentValueBeforeStep + presentValueOfCashFlowForPeriod
 
-            row = Row
-              { time                                   = now
-              , deploymentBeforeStep                   = deploymentChosen
-              , usageTasksPerTimeBeforeStep            = usageTasksPerTimeBeforeStep
-              , successRateBeforeStep                  = successRateBeforeStep
-              , dataAdvantageBeforeStep                = dataAdvantageBeforeStep
-              , unitCostPerTask                        = unitCostThisPeriod
-              , revenuePerTime                         = revenuePerTime
-              , costPerTime                            = costPerTime
-              , profitPerTime                          = profitRate
-              , periodProfit                           = periodProfit
-              , presentValueOfPeriodProfit             = presentValueOfPeriodProfit
-              , cumulativePresentValueOfProfit         = cumulativePresentValueOfProfit
-              }
+            -- unit cost snapshot for this step
+            unitCostPerTask = case deploymentBeforeStep of
+              External -> externalCost exogenousBeforeStep
+              Internal ->
+                internalCost exogenousBeforeStep usageBeforeStep
+                  / processingCapacity exogenousBeforeStep usageBeforeStep
 
-            (exogenous', state')   = step clock exogenous stateBeforeStep
-            clock'                 = clock { now = now + dt }
-        in row : go cumulativePresentValueOfProfit clock' exogenous' state'
+            row = Row {..}
+
+            (exogenousNextStep, stateNextStep) = step clockBeforeStep exogenousBeforeStep stateBeforeStep'
+            clockNextStep = clockBeforeStep {now = now + dt}
+            discountMultiplierNextStep = discountMultiplierBeforeStep * discountPerStep exogenousBeforeStep
+        in row : go cumulativePresentValueOfCashFlow clockNextStep discountMultiplierNextStep exogenousNextStep stateNextStep
 \end{code}
 
 \begin{code}
@@ -494,15 +492,9 @@ We distinguish two deployment modes:
   pointsUnitCostPerTask =
     map (\Row{..} -> (inUnit time month, inUnit unitCostPerTask (dollar ./ task)))
 
-  pointsCumulativePresentValueOfProfit :: [Row] -> [(Scalar, Scalar)]
-  pointsCumulativePresentValueOfProfit =
-    map (\Row{..} -> (inUnit time month, inUnit cumulativePresentValueOfProfit dollar))
-
-  horizonMonths :: Int
-  horizonMonths = 60
-
-  monthlyClock :: Clock
-  monthlyClock = Clock { now = 0 *@ month, dt = 1 *@ month }
+  pointsCumulativePresentValueOfCashFlow :: [Row] -> [(Scalar, Scalar)]
+  pointsCumulativePresentValueOfCashFlow =
+    map (\Row{..} -> (inUnit time month, inUnit cumulativePresentValueOfCashFlow dollar))
 
   main :: IO ()
   main = do
@@ -512,12 +504,18 @@ We distinguish two deployment modes:
           , ("breakEven",      breakEven)
           ]
 
+        monthlyClock = Clock { now = 0 *@ month, dt = 1 *@ month }
+
+        horizonMonths = 60
+
+        baseExogenous = baseExogenousFor (dt monthlyClock)
+
         takeH (name, strat) =
           (name, take horizonMonths (simulate strat monthlyClock baseExogenous baseState))
 
         runs = map takeH strategies
 
-        fileOptions = FileOptions (800, 600) SVG loadSansSerifFonts
+        fileOptions = FileOptions { _fo_size = (800, 600), _fo_format = SVG, _fo_fonts = loadSansSerifFonts }
 
     -- Success rate plot
     toFile fileOptions "success_rate.svg" $ do
@@ -541,5 +539,5 @@ We distinguish two deployment modes:
       layout_x_axis . laxis_title .= "Month"
       layout_y_axis . laxis_title .= "USD"
       forM_ runs $ \(name, rows) ->
-        plot (line name [pointsCumulativePresentValueOfProfit rows])
+        plot (line name [pointsCumulativePresentValueOfCashFlow rows])
 \end{code}
