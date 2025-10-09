@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
-    <title>{{atomTitle}}</title>
+    <title>{{title}}</title>
     <link href="{{domain}}{{atomUrl}}" rel="self" type="application/rss+xml" />
   <updated>{{currentTime}}</updated>
   <author>
@@ -8,17 +8,21 @@
   </author>
   <id>{{domain}}/</id>
 
-  {{#posts}}
+  {{#articles}}
+  {{#article}}
   <entry>
       <title>{{title}}</title>
       <link href="{{domain}}/{{url}}"/>
       <id>{{domain}}/{{url}}</id>
-      <updated>{{published}}</updated>
+      <updated>{{date}}</updated>
       {{#tags}}
+      {{#items}}
       <category term="{{.}}"/>
+      {{/items}}
       {{/tags}}
-      <summary>{{teaser}}</summary>
+      <summary type="html"><![CDATA[{{{teaser}}}]]></summary>
       <content type="html"><![CDATA[{{{content}}}]]></content>
   </entry>
-  {{/posts}}
+  {{/article}}
+  {{/articles}}
 </feed>
