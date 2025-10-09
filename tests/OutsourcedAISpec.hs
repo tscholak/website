@@ -10,6 +10,10 @@ import OutsourcedAI
 import Quantity (Quantity(..), (*@), (./), dollar, second, month, hour, one, inUnit)
 import Data.Ord (clamp)
 
+-- Define baseExogenous for testing purposes
+baseExogenous :: Exogenous
+baseExogenous = baseExogenousFor (1 *@ month)
+
 spec :: Spec
 spec = do
   describe "Revenue calculation" $ do
@@ -102,21 +106,21 @@ spec = do
   describe "Simulation" $ do
     it "advances time correctly" $ do
       let clock = Clock { now = 0 *@ month, dt = 1 *@ month }
-      let states = take 3 $ simulate alwaysExternal clock baseExogenous baseState
-      let times = map fst states
+      let rows = take 3 $ simulate alwaysExternal clock baseExogenous baseState
+      let times = map time rows
       times `shouldBe` [0 *@ month, 1 *@ month, 2 *@ month]
-      
+
     it "updates state over time" $ do
       let clock = Clock { now = 0 *@ month, dt = 1 *@ month }
-      let states = take 5 $ simulate alwaysExternal clock baseExogenous baseState
-      let successRates = map (successRate . snd) states
+      let rows = take 5 $ simulate alwaysExternal clock baseExogenous baseState
+      let successRates = map successRateBeforeStep rows
       -- Success rate should generally increase over time for external
       last successRates `shouldSatisfy` (> head successRates)
-      
+
     it "applies deployment strategy at each step" $ do
       let clock = Clock { now = 0 *@ month, dt = 1 *@ month }
-      let states = take 3 $ simulate alwaysInternal clock baseExogenous baseState
-      let deployments = map (deployment . snd) states
+      let rows = take 3 $ simulate alwaysInternal clock baseExogenous baseState
+      let deployments = map deploymentBeforeStep rows
       deployments `shouldBe` [Internal, Internal, Internal]
 
   describe "Update functions" $ do
