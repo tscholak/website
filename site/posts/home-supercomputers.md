@@ -5,6 +5,7 @@ tags:
   items: [gpu, infrastructure, economics]
 teaser: |
   NVIDIA's DGX Spark promises to put an "AI supercomputer" on your desk. But for most people, owning a $4,000 box is slower, less flexible, and more expensive than renting smartly. Here's why.
+image: home-supercomputers.png
 ---
 
 ## The DGX Spark Hype
@@ -12,7 +13,9 @@ teaser: |
 NVIDIA just released the DGX Spark, a $3,999 "AI supercomputer for your desk" the size of a Mac Mini. It ships with 128 GB of unified memory, a Blackwell GPU, and marketing that borders on poetry:
 
 > "Own your compute!"
+
 > "Escape cloud vendor lock-in!"
+
 > "Run the largest models yourself at home!"
 
 Influencers are already unboxing and calling it a game-changer for "taking back control" from the cloud.
@@ -23,12 +26,12 @@ Here's the problem: **it's slow for real work**. Worse, the whole premise is a t
 
 Running GPT-OSS 20B in Ollama (via [@LMSYS](https://docs.google.com/spreadsheets/d/1SF1u0J2vJ-ou-R_Ry1JZQ0iscOZL8UKHpdVFr85tNLU/edit?gid=0#gid=0)):
 
-| Hardware / Model          | Precision     | Prefill (tokens/sec) | Decode (tokens/sec) | Relative Speed vs Spark | Notes |
-|---------------------------|---------------|----------------------|---------------------|-------------------------|-------|
+| Hardware / Model          | Precision     | Prefill (tokens/sec) | Decode (tokens/sec) | Relative Speed vs Spark | Notes                                    |
+|---------------------------|---------------|----------------------|---------------------|-------------------------|------------------------------------------|
 | **DGX Spark (GB10)**      | 4-bit (mxfp4) | 2,054                | 49.7                | 1x                      | 128 GB LPDDR5X @ 273 GB/s unified memory |
-| **RTX 6000 Blackwell**    | 4-bit (mxfp4) | 10,108               | 215                 | 4.3x faster             | Workstation GPU with ~1 TB/s bandwidth |
-| **GeForce RTX 5090**      | 4-bit (mxfp4) | 8,519                | 205                 | 4.0x faster             | Consumer flagship GPU |
-| **GH200 (Cloud, est.)**   | FP8 / FP16    | ~10,000-15,000     | ~250-350          | ~5-7x faster          | 96 GB HBM3 @ 4 TB/s; $1.49/hr on Lambda |
+| **RTX 6000 Blackwell**    | 4-bit (mxfp4) | 10,108               | 215                 | 4.3x faster             | Workstation GPU with ~1 TB/s bandwidth   |
+| **GeForce RTX 5090**      | 4-bit (mxfp4) | 8,519                | 205                 | 4.0x faster             | Consumer flagship GPU                    |
+| **GH200 (Cloud, est.)**   | FP8 / FP16    | ~10,000-15,000       | ~250-350            | ~5-7x faster            | 96 GB HBM3 @ 4 TB/s; $1.49/hr on Lambda  |
 
 The Spark is **4x slower** than high-end GPUs on standard workloads. In SGLang, for a 70B model (FP8), it manages 2.7 tokens per second in generation. Not exactly "supercomputer" speed.
 
@@ -36,7 +39,7 @@ The bottleneck is the memory bandwidth, not the GPU cores. The Spark's 273 GB/s 
 
 ### The NVFP4 Trap
 
-NVIDIA's marketing claims "1 petaFLOP" of performance or "1000 AI FLOPS." Technically true, but only for NVFP4, which is NVIDIA's new proprietary 4-bit floating-point format that almost no models use yet.
+NVIDIA's marketing claims "1 petaFLOP" of performance or "1000 AI TFLOPS." Technically true, but only for NVFP4, which is NVIDIA's new proprietary 4-bit floating-point format that almost no models use yet.
 
 Load a standard model and the Spark essentially behaves like a mid-range GPU with relatively weak inference performance. You're buying hardware optimized for a format the ecosystem hasn't adopted yet.
 
@@ -138,6 +141,6 @@ Disclaimer: I have no relationship with Lambda Labs or NVIDIA. I just do a lot o
 
 Disclaimer 2: The author of this article has since purchased a DGX Spark because he thinks it looks cool and makes him look smart at parties. Just kidding.
 
----
+## Next Steps
 
 If you want to try this out, check out [devbox](https://github.com/tscholak/devbox), my little opinionated tool to manage ephemeral GPU instances easily. Drop me a line if you have questions or feedback!

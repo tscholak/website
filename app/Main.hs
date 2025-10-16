@@ -1017,7 +1017,9 @@ buildRules config = do
   buildFeed config articles
 
 -- | data type for git hash
-data GitHash = GitHash {gitHash :: String, gitDate :: String, gitAuthor :: String, gitMessage :: String}
+data GitHash
+  = Committed {gitHash :: String, gitDate :: String, gitAuthor :: String, gitMessage :: String}
+  | Uncommitted
   deriving (Eq, Show)
 
 -- | get git hash of last commit of a file
@@ -1032,17 +1034,19 @@ getGitHash path = do
         ]
   Stdout (gitInfo :: String) <- cmd cmdLine
   case lines gitInfo of
-    [hash, date, author, subject] -> pure $ GitHash hash date author subject
+    [hash, date, author, subject] -> pure $ Committed hash date author subject
+    [] -> pure Uncommitted
     _ -> fail $ "Unexpected git log output for " ++ path
 
 -- | pretty print git hash with link to GitHub commit
 prettyGitHash :: Config Identity -> GitHash -> Action String
-prettyGitHash config GitHash {..} = do
+prettyGitHash config (Committed {..}) = do
   Just uri <- pure $ do
     repo <- runIdentity . siteGithubRepository . siteMeta $ config
     return $ repo {uriPath = uriPath repo <> "/commit/" <> gitHash}
   let link = "<a href=\"" <> show uri <> "\">" <> gitHash <> "</a>"
   return $ "commit " <> link <> " (" <> gitDate <> ") " <> gitAuthor <> ": " <> gitMessage
+prettyGitHash _ Uncommitted = return "uncommitted changes"
 
 -- | parser info for command line arguments
 parserInfo ::
