@@ -1,6 +1,8 @@
 ---
 title: "The Home Supercomputer Fallacy"
-date: Oct 15, 2025
+publication:
+  status: published
+  date: Oct 15, 2025
 tags:
   items: [gpu, infrastructure, economics]
 teaser: |

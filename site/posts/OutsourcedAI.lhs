@@ -1,6 +1,7 @@
 ---
 title: "Stop Renting Moat: The Computational Proof"
-date: Aug 21, 2025
+publication:
+  status: draft
 teaser: WIP
 tags:
   items: [ai, strategy, economics, cost-analysis]

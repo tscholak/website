@@ -7,7 +7,9 @@ author:
 - Harm de Vries
 - Chris Pal
 journal: "Proceedings of the 2021 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies"
-date: Jun 1, 2021
+publication:
+  status: published
+  date: Jun 1, 2021
 tldr: "It's like RAT-SQL, but simpler and faster."
 image: duorat.png
 tags:

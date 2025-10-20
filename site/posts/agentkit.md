@@ -1,6 +1,8 @@
 ---
 title: "Everyone's Arguing About the Wrong Abstraction Layer"
-date: Oct 8, 2025
+publication:
+  status: published
+  date: Oct 8, 2025
 teaser: >
   OpenAI [shipped AgentKit this week](https://openai.com/index/introducing-agentkit/), a platform with a visual workflow editor, versioned agents, governed connectors, and evals infrastructure. The internet immediately split into two camps: people dunking on it ("this isn't AGI!") and people defending visual editors as necessary for non-technical users.
 

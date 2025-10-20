@@ -1,10 +1,17 @@
-# Skills, Composition, and the Coordination Problem
+---
+title: "Skills, Composition, and the Coordination Problem"
+publication:
+  status: draft
+teaser: >
+  Anthropic released [Skills](https://www.anthropic.com/news/skills) this week, and the response was immediate: finally, composable AI capabilities! Build once, reuse anywhere. Give Claude folders of instructions and scripts, and it'll load what it needs automatically. Modular, portable, efficient.
 
-*A follow-up to "Everyone's Arguing About the Wrong Abstraction Layer"*
+  There's just one problem: it isn't actually composable.
+tags:
+  items: [ai, agents]
+image: kung-fu.png
+---
 
-Anthropic released [Skills](https://www.anthropic.com/news/skills) this week, and the response was immediate: finally, composable AI capabilities! Build once, reuse anywhere. Give Claude folders of instructions and scripts, and it'll load what it needs automatically. Modular, portable, efficient.
-
-There's just one problem: it isn't actually composable.
+This is a follow-up to "Everyone's Arguing About the Wrong Abstraction Layer".
 
 ## What Skills Actually Are
 

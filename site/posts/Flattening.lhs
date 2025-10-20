@@ -1,6 +1,8 @@
 ---
 title: "How to Get from A Tree to A Flat Shape And Back Again"
-date: Feb 2, 2022
+publication:
+  status: published
+  date: Feb 2, 2022
 teaser: >
   The adventure continues in this "Unrecurse" sequel.
   Previously, we bravely faced turmoil and confusion

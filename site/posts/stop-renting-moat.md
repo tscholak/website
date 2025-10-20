@@ -1,6 +1,8 @@
 ---
 title: "Stop Renting Moat: Why Enterprises Must Own Part of Their AI Stack"
-date: Aug 20, 2025
+publication:
+  status: published
+  date: Aug 20, 2025
 teaser: |
   Enterprises are told they have to choose between cost or differentiation. But that's a false choice. If you outsource all AI, your costs stay volatile and your upside is capped. The winners will own enough of the stack to control both unit cost and quality.
 tags:

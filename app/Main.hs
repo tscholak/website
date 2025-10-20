@@ -6,6 +6,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
@@ -17,6 +18,8 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeFamilyDependencies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 
@@ -28,7 +31,7 @@ import Control.Lens (at, ix, (?~), (^?))
 import Control.Monad (void)
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import Data.Aeson (toJSON)
-import qualified Data.Aeson as A (Encoding, FromJSON (parseJSON), KeyValue ((.=)), Options (..), Result (Error, Success), ToJSON (toJSON), Value (..), defaultOptions, fromJSON, genericParseJSON, genericToEncoding, genericToJSON, object, withObject, (.:), (.:?))
+import qualified Data.Aeson as A (Encoding, FromArgs, FromJSON (parseJSON), KeyValue ((.=)), Options (..), Result (Error, Success), SumEncoding (..), ToJSON (toJSON), Value (..), defaultOptions, fromJSON, genericParseJSON, genericToEncoding, genericToJSON, object, withObject, withText, (.:), (.:?))
 import qualified Data.Aeson.KeyMap as KM (insert, lookup, union)
 import qualified Data.Aeson.Lens as A (AsValue (_Object, _String), key, pattern Integer)
 import qualified Data.Aeson.Parser.Internal as A (jsonEOF')
@@ -36,6 +39,7 @@ import qualified Data.Attoparsec.ByteString as Atto
 import qualified Data.Binary.Get as Get
 import qualified Data.Binary.Put as Put
 import qualified Data.ByteString as BS
+import qualified Data.Char
 import Data.Either.Validation (Validation)
 import qualified Data.Either.Validation as Validation
 import Data.Functor.Compose (Compose (Compose))
@@ -46,10 +50,10 @@ import Data.List.NonEmpty (NonEmpty)
 import qualified Data.List.NonEmpty as NonEmpty
 import Data.Map.Lazy (Map)
 import qualified Data.Map.Lazy as Map
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Ord (Down (Down))
 import qualified Data.Text as T
-import Data.Time (UTCTime, defaultTimeLocale, getCurrentTime, parseTimeOrError)
+import Data.Time (UTCTime, defaultTimeLocale, getCurrentTime, parseTimeM, parseTimeOrError)
 import Data.Time.Format.ISO8601 (iso8601Show)
 import qualified Data.Yaml as Yaml
 import Development.Shake (Action, Exit (..), ShakeOptions (..), Stderr (..), Stdout (..), cmd, copyFileChanged, forP, getDirectoryFiles, putNormal, readFile', shakeOptions, writeFile', pattern Chatty)
@@ -339,29 +343,126 @@ configErrors =
 
 newtype TagName = TagName String
   deriving stock (Generic, Eq, Ord, Show)
-
-instance A.FromJSON TagName where
-  parseJSON :: Yaml.Value -> Yaml.Parser TagName
-  parseJSON v = TagName <$> A.parseJSON v
-
-instance A.ToJSON TagName where
-  toJSON :: TagName -> Yaml.Value
-  toJSON (TagName tagName) = A.toJSON tagName
-
-instance Binary TagName where
-  put :: TagName -> Put.Put
-  put (TagName tagName) = put tagName
-  get :: Get.Get TagName
-  get = TagName <$> get
+  deriving newtype (A.ToJSON, A.FromJSON, Binary)
 
 -- | data type for article kinds
 data ArticleKind = BlogPostKind | PublicationKind
   deriving stock (Eq, Ord, Show, Generic)
 
--- | extract the article kind from an article of a given kind
-articleKind :: forall kind. Article kind -> ArticleKind
-articleKind BlogPost {} = BlogPostKind
-articleKind Publication {} = PublicationKind
+-- | data type for publish status kinds
+data PublishStatusKind = PublishedKind | DraftKind
+  deriving stock (Eq, Ord, Show, Generic)
+
+data PublicationField (s :: PublishStatusKind) where
+  PubDate :: Date -> PublicationField 'PublishedKind
+  PubDraft :: PublicationField 'DraftKind
+
+deriving stock instance Show (PublicationField s)
+
+deriving stock instance Eq (PublicationField s)
+
+deriving stock instance Ord (PublicationField s)
+
+instance Binary (PublicationField 'PublishedKind) where
+  put :: PublicationField 'PublishedKind -> Put.Put
+  put (PubDate d) = put d
+  get :: Get.Get (PublicationField 'PublishedKind)
+  get = PubDate <$> get
+
+instance Binary (PublicationField 'DraftKind) where
+  put :: PublicationField 'DraftKind -> Put.Put
+  put PubDraft = pure ()
+  get :: Get.Get (PublicationField 'DraftKind)
+  get = pure PubDraft
+
+instance A.FromJSON (PublicationField 'PublishedKind) where
+  parseJSON :: Yaml.Value -> Yaml.Parser (PublicationField 'PublishedKind)
+  parseJSON = A.withObject "PublicationField PublishedKind" $ \o -> do
+    dateStr <- o A..: "date"
+    date <- A.parseJSON dateStr
+    pure (PubDate date)
+
+instance A.FromJSON (PublicationField 'DraftKind) where
+  parseJSON :: Yaml.Value -> Yaml.Parser (PublicationField 'DraftKind)
+  parseJSON = A.withObject "PublicationField DraftKind" $ \_ -> pure PubDraft
+
+instance A.ToJSON (PublicationField s) where
+  toJSON :: PublicationField s -> Yaml.Value
+  toJSON (PubDate date) =
+    A.object
+      [ "date" A..= date
+      ]
+  toJSON PubDraft =
+    A.object
+      []
+
+-- | Date type that can be in human-readable format or UTC
+data Date
+  = HumanFormat String  -- "Oct 15, 2025"
+  | UTC UTCTime         -- parsed timestamp for ISO8601 output
+  deriving stock (Show, Generic)
+
+-- | Equality based on the underlying time
+instance Eq Date where
+  (==) :: Date -> Date -> Bool
+  a == b = dateToUTC a == dateToUTC b
+
+-- | Ordering based on the underlying time
+instance Ord Date where
+  compare :: Date -> Date -> Ordering
+  compare a b = compare (dateToUTC a) (dateToUTC b)
+
+-- | Extract UTCTime from either variant
+dateToUTC :: Date -> UTCTime
+dateToUTC (UTC utc) = utc
+dateToUTC (HumanFormat str) = parseTimeOrError True defaultTimeLocale "%b %e, %Y" str
+
+-- | Convert any Date to UTC variant (for feeds)
+toUTC :: Date -> Date
+toUTC (HumanFormat str) = UTC (dateToUTC (HumanFormat str))
+toUTC u@(UTC _) = u
+
+-- | Convert an article's publication date to UTC format (for feeds)
+articleToUTC :: Article kind 'PublishedKind -> Article kind 'PublishedKind
+articleToUTC post@BlogPost{bpPublication = PubDate date} =
+  post{bpPublication = PubDate (toUTC date)}
+articleToUTC pub@Publication{pubPublication = PubDate date} =
+  pub{pubPublication = PubDate (toUTC date)}
+
+-- | Convert a published article to UTC format (for feeds)
+somePublishedArticleToUTC :: SomePublishedArticle -> SomePublishedArticle
+somePublishedArticleToUTC (SomePublishedArticle article) =
+  SomePublishedArticle (articleToUTC article)
+
+instance A.FromJSON Date where
+  parseJSON :: Yaml.Value -> Yaml.Parser Date
+  parseJSON = A.withText "Date" $ \t -> do
+    let str = T.unpack t
+    -- Validate that it parses correctly
+    case parseTimeM True defaultTimeLocale "%b %e, %Y" str of
+      Nothing -> fail $ "Invalid date format: " ++ str ++ ". Expected format: 'Mon DD, YYYY' (e.g., 'Jan 16, 2022')"
+      Just (_ :: UTCTime) -> pure (HumanFormat str)
+
+instance A.ToJSON Date where
+  toJSON :: Date -> Yaml.Value
+  toJSON (HumanFormat str) = A.toJSON str
+  toJSON (UTC utc) = A.toJSON (iso8601Show utc)
+
+instance Binary Date where
+  put :: Date -> Put.Put
+  put (HumanFormat str) = Put.putWord8 0 >> put str
+  put (UTC utc) = Put.putWord8 1 >> put (iso8601Show utc)
+  get :: Get.Get Date
+  get = do
+    tag <- Get.getWord8
+    case tag of
+      0 -> HumanFormat <$> get
+      1 -> do
+        dateStr <- get
+        case parseTimeM False defaultTimeLocale "%Y-%m-%dT%H:%M:%S%QZ" dateStr of
+          Nothing -> fail $ "Failed to parse stored date: " ++ dateStr
+          Just d -> pure (UTC d)
+      _ -> fail $ "Unknown Date tag: " ++ show tag
 
 -- | helper data type for non-empty lists
 newtype Items a = Items {items :: NonEmpty a}
@@ -423,29 +524,29 @@ extractOrDefaultLicense src v =
         }
 
 -- | data type for articles
-data Article kind where
+data Article (kind :: ArticleKind) (status :: PublishStatusKind) where
   BlogPost ::
     { bpTitle :: String,
       bpContent :: String,
       bpUrl :: String,
-      bpDate :: String,
+      bpPublication :: PublicationField status,
       bpTagNames :: Maybe (Items TagName),
       bpTeaser :: String,
       bpReadTime :: Int,
       bpGitHash :: String,
       bpImage :: Maybe String,
       bpLicense :: Maybe LicenseInfo,
-      bpPrev :: Maybe (Article 'BlogPostKind),
-      bpNext :: Maybe (Article 'BlogPostKind)
+      bpPrev :: Maybe (Article 'BlogPostKind status),
+      bpNext :: Maybe (Article 'BlogPostKind status)
     } ->
-    Article 'BlogPostKind
+    Article 'BlogPostKind status
   Publication ::
     { pubTitle :: String,
       pubAuthor :: [String],
       pubJournal :: String,
       pubContent :: String,
       pubUrl :: String,
-      pubDate :: String,
+      pubPublication :: PublicationField status,
       pubTagNames :: Maybe (Items TagName),
       pubTldr :: String,
       pubGitHash :: String,
@@ -457,24 +558,24 @@ data Article kind where
       pubSlides :: Maybe String,
       pubPoster :: Maybe String,
       pubLicense :: Maybe LicenseInfo,
-      pubPrev :: Maybe (Article 'PublicationKind),
-      pubNext :: Maybe (Article 'PublicationKind)
+      pubPrev :: Maybe (Article 'PublicationKind status),
+      pubNext :: Maybe (Article 'PublicationKind status)
     } ->
-    Article 'PublicationKind
+    Article 'PublicationKind status
 
-deriving stock instance Eq (Article kind)
+deriving stock instance (Eq (PublicationField status)) => Eq (Article kind status)
 
-deriving stock instance Ord (Article kind)
+deriving stock instance (Eq (PublicationField status), Ord (PublicationField status)) => Ord (Article kind status)
 
-deriving stock instance Show (Article kind)
+deriving stock instance (Show (PublicationField status)) => Show (Article kind status)
 
-instance Binary (Article 'BlogPostKind) where
-  put :: Article 'BlogPostKind -> Put.Put
+instance (Binary (PublicationField status), Binary (Maybe (Article 'BlogPostKind status))) => Binary (Article 'BlogPostKind status) where
+  put :: Article 'BlogPostKind status -> Put.Put
   put BlogPost {..} = do
     put bpTitle
     put bpContent
     put bpUrl
-    put bpDate
+    put bpPublication
     put bpTagNames
     put bpTeaser
     put bpReadTime
@@ -483,7 +584,7 @@ instance Binary (Article 'BlogPostKind) where
     put bpLicense
     put bpPrev
     put bpNext
-  get :: Get.Get (Article BlogPostKind)
+  get :: Get.Get (Article 'BlogPostKind status)
   get =
     BlogPost
       <$> get
@@ -499,15 +600,15 @@ instance Binary (Article 'BlogPostKind) where
       <*> get
       <*> get
 
-instance Binary (Article 'PublicationKind) where
-  put :: Article PublicationKind -> Put.Put
+instance (Binary (PublicationField status), Binary (Maybe (Article 'PublicationKind status))) => Binary (Article 'PublicationKind status) where
+  put :: Article 'PublicationKind status -> Put.Put
   put Publication {..} = do
     put pubTitle
     put pubAuthor
     put pubJournal
     put pubContent
     put pubUrl
-    put pubDate
+    put pubPublication
     put pubTagNames
     put pubTldr
     put pubGitHash
@@ -521,7 +622,7 @@ instance Binary (Article 'PublicationKind) where
     put pubLicense
     put pubPrev
     put pubNext
-  get :: Get.Get (Article PublicationKind)
+  get :: Get.Get (Article 'PublicationKind status)
   get =
     Publication
       <$> get
@@ -544,14 +645,14 @@ instance Binary (Article 'PublicationKind) where
       <*> get
       <*> get
 
-instance A.ToJSON (Article 'BlogPostKind) where
-  toJSON :: Article BlogPostKind -> Yaml.Value
+instance (A.ToJSON (PublicationField status), A.ToJSON (Maybe (Article 'BlogPostKind status))) => A.ToJSON (Article 'BlogPostKind status) where
+  toJSON :: Article 'BlogPostKind status -> Yaml.Value
   toJSON BlogPost {..} =
     A.object
       [ "title" A..= bpTitle,
         "content" A..= bpContent,
         "url" A..= bpUrl,
-        "date" A..= bpDate,
+        "publication" A..= bpPublication,
         "tags" A..= bpTagNames,
         "teaser" A..= bpTeaser,
         "readTime" A..= bpReadTime,
@@ -562,8 +663,8 @@ instance A.ToJSON (Article 'BlogPostKind) where
         "next" A..= bpNext
       ]
 
-instance A.ToJSON (Article 'PublicationKind) where
-  toJSON :: Article PublicationKind -> Yaml.Value
+instance (A.ToJSON (PublicationField status), A.ToJSON (Maybe (Article 'PublicationKind status))) => A.ToJSON (Article 'PublicationKind status) where
+  toJSON :: Article 'PublicationKind status -> Yaml.Value
   toJSON Publication {..} =
     A.object
       [ "title" A..= pubTitle,
@@ -571,7 +672,7 @@ instance A.ToJSON (Article 'PublicationKind) where
         "journal" A..= pubJournal,
         "content" A..= pubContent,
         "url" A..= pubUrl,
-        "date" A..= pubDate,
+        "publication" A..= pubPublication,
         "tags" A..= pubTagNames,
         "tldr" A..= pubTldr,
         "gitHash" A..= pubGitHash,
@@ -587,15 +688,15 @@ instance A.ToJSON (Article 'PublicationKind) where
         "next" A..= pubNext
       ]
 
-instance A.FromJSON (Article 'BlogPostKind) where
-  parseJSON :: Yaml.Value -> Yaml.Parser (Article BlogPostKind)
+instance (A.FromJSON (PublicationField status), A.FromJSON (Maybe (Article 'BlogPostKind status))) => A.FromJSON (Article 'BlogPostKind status) where
+  parseJSON :: Yaml.Value -> Yaml.Parser (Article 'BlogPostKind status)
   parseJSON =
     A.withObject "Blog post" $ \o ->
       BlogPost
         <$> o A..: "title"
         <*> o A..: "content"
         <*> o A..: "url"
-        <*> o A..: "date"
+        <*> o A..: "publication"
         <*> o A..:? "tags"
         <*> o A..: "teaser"
         <*> o A..: "readTime"
@@ -605,8 +706,8 @@ instance A.FromJSON (Article 'BlogPostKind) where
         <*> o A..:? "prev"
         <*> o A..:? "next"
 
-instance A.FromJSON (Article 'PublicationKind) where
-  parseJSON :: Yaml.Value -> Yaml.Parser (Article PublicationKind)
+instance (A.FromJSON (PublicationField status), A.FromJSON (Maybe (Article 'PublicationKind status))) => A.FromJSON (Article 'PublicationKind status) where
+  parseJSON :: Yaml.Value -> Yaml.Parser (Article 'PublicationKind status)
   parseJSON =
     A.withObject "Publication" $ \o ->
       Publication
@@ -615,7 +716,7 @@ instance A.FromJSON (Article 'PublicationKind) where
         <*> o A..: "journal"
         <*> o A..: "content"
         <*> o A..: "url"
-        <*> o A..: "date"
+        <*> o A..: "publication"
         <*> o A..:? "tags"
         <*> o A..: "tldr"
         <*> o A..: "gitHash"
@@ -631,8 +732,8 @@ instance A.FromJSON (Article 'PublicationKind) where
         <*> o A..:? "next"
 
 -- | assign next and previous articles based on the given order
-assignAdjacentArticles :: forall kind. [Article kind] -> [Article kind]
-assignAdjacentArticles posts =
+assignAdjacentPublishedArticles :: forall kind. [Article kind 'PublishedKind] -> [Article kind 'PublishedKind]
+assignAdjacentPublishedArticles posts =
   [ let prev = posts ^? ix (i + 1)
         next = posts ^? ix (i - 1)
         go Publication {} = cur {pubPrev = prev, pubNext = next}
@@ -641,55 +742,150 @@ assignAdjacentArticles posts =
   | (cur, i) <- zip posts [0 :: Int ..]
   ]
 
--- | type-erased article
-data SomeArticle = forall kind. SomeArticle (Article kind)
+-- | type-erased article with status hidden for a specific kind
+data SomeStatusArticle kind where
+  SomeStatusArticle :: Article kind status -> SomeStatusArticle kind
 
-deriving stock instance Show SomeArticle
+instance Show (SomeStatusArticle kind) where
+  show :: SomeStatusArticle kind -> String
+  show (SomeStatusArticle article) = case article of
+    BlogPost {bpTitle, bpUrl} -> "SomeStatusArticle (BlogPost {bpTitle = " ++ show bpTitle ++ ", bpUrl = " ++ show bpUrl ++ ", ...})"
+    Publication {pubTitle, pubUrl} -> "SomeStatusArticle (Publication {pubTitle = " ++ show pubTitle ++ ", pubUrl = " ++ show pubUrl ++ ", ...})"
 
-withSomeArticle :: forall a. SomeArticle -> (forall kind. Article kind -> a) -> a
-withSomeArticle (SomeArticle article) f = f article
+instance Binary (SomeStatusArticle 'BlogPostKind) where
+  put :: SomeStatusArticle 'BlogPostKind -> Put.Put
+  put (SomeStatusArticle article) = case article of
+    BlogPost{bpPublication = PubDate _} -> do
+      Put.putWord8 1  -- Tag for published
+      put article
+    BlogPost{bpPublication = PubDraft} -> do
+      Put.putWord8 0  -- Tag for draft
+      put article
+  get :: Get.Get (SomeStatusArticle 'BlogPostKind)
+  get = do
+    tag <- Get.getWord8
+    case tag of
+      0 -> SomeStatusArticle <$> (get :: Get.Get (Article 'BlogPostKind 'DraftKind))
+      1 -> SomeStatusArticle <$> (get :: Get.Get (Article 'BlogPostKind 'PublishedKind))
+      _ -> fail $ "Unknown status tag: " ++ show tag
 
-instance Eq SomeArticle where
-  (==) :: SomeArticle -> SomeArticle -> Bool
-  (SomeArticle a@BlogPost {}) == (SomeArticle b@BlogPost {}) = a == b
-  (SomeArticle a@Publication {}) == (SomeArticle b@Publication {}) = a == b
+instance Binary (SomeStatusArticle 'PublicationKind) where
+  put :: SomeStatusArticle 'PublicationKind -> Put.Put
+  put (SomeStatusArticle article) = case article of
+    Publication{pubPublication = PubDate _} -> do
+      Put.putWord8 1  -- Tag for published
+      put article
+    Publication{pubPublication = PubDraft} -> do
+      Put.putWord8 0  -- Tag for draft
+      put article
+  get :: Get.Get (SomeStatusArticle 'PublicationKind)
+  get = do
+    tag <- Get.getWord8
+    case tag of
+      0 -> SomeStatusArticle <$> (get :: Get.Get (Article 'PublicationKind 'DraftKind))
+      1 -> SomeStatusArticle <$> (get :: Get.Get (Article 'PublicationKind 'PublishedKind))
+      _ -> fail $ "Unknown status tag: " ++ show tag
+
+instance A.FromJSON (SomeStatusArticle 'BlogPostKind) where
+  parseJSON :: Yaml.Value -> Yaml.Parser (SomeStatusArticle 'BlogPostKind)
+  parseJSON v = A.withObject "Blog post" (\o -> do
+    pub <- o A..: "publication"
+    case pub of
+      A.Object pubObj -> do
+        status :: String <- pubObj A..: "status"
+        case status of
+          "published" -> do
+            article <- A.parseJSON @(Article 'BlogPostKind 'PublishedKind) v
+            return (SomeStatusArticle article)
+          "draft" -> do
+            article <- A.parseJSON @(Article 'BlogPostKind 'DraftKind) v
+            return (SomeStatusArticle article)
+          _ -> fail $ "Unknown publication status: " ++ status
+      _ -> fail "Expected publication to be an object") v
+
+instance A.FromJSON (SomeStatusArticle 'PublicationKind) where
+  parseJSON :: Yaml.Value -> Yaml.Parser (SomeStatusArticle 'PublicationKind)
+  parseJSON v = A.withObject "Publication" (\o -> do
+    pub <- o A..: "publication"
+    case pub of
+      A.Object pubObj -> do
+        status :: String <- pubObj A..: "status"
+        case status of
+          "published" -> do
+            article <- A.parseJSON @(Article 'PublicationKind 'PublishedKind) v
+            return (SomeStatusArticle article)
+          "draft" -> do
+            article <- A.parseJSON @(Article 'PublicationKind 'DraftKind) v
+            return (SomeStatusArticle article)
+          _ -> fail $ "Unknown publication status: " ++ status
+      _ -> fail "Expected publication to be an object") v
+
+extractPublished ::
+  SomeStatusArticle kind ->
+  Maybe (Article kind 'PublishedKind, UTCTime)
+extractPublished (SomeStatusArticle a) =
+  case a of
+    a'@BlogPost {bpPublication = PubDate date} -> Just (a', dateToUTC date)
+    BlogPost {bpPublication = PubDraft} -> Nothing
+    a'@Publication {pubPublication = PubDate date} -> Just (a', dateToUTC date)
+    Publication {pubPublication = PubDraft} -> Nothing
+
+-- | type-erased article with both kind and status hidden
+-- Note: This only wraps published articles to ensure type safety
+data SomePublishedArticle = forall kind. SomePublishedArticle (Article kind 'PublishedKind)
+
+deriving stock instance Show SomePublishedArticle
+
+withSomePublishedArticle :: forall a. SomePublishedArticle -> (forall kind. Article kind 'PublishedKind -> a) -> a
+withSomePublishedArticle (SomePublishedArticle article) f = f article
+
+instance Eq SomePublishedArticle where
+  (==) :: SomePublishedArticle -> SomePublishedArticle -> Bool
+  (SomePublishedArticle a@BlogPost {}) == (SomePublishedArticle b@BlogPost {}) = a == b
+  (SomePublishedArticle a@Publication {}) == (SomePublishedArticle b@Publication {}) = a == b
   _ == _ = False
 
-instance Ord SomeArticle where
-  compare :: SomeArticle -> SomeArticle -> Ordering
-  compare (SomeArticle a@BlogPost {}) (SomeArticle b@BlogPost {}) = compare a b
-  compare (SomeArticle BlogPost {}) (SomeArticle Publication {}) = LT
-  compare (SomeArticle Publication {}) (SomeArticle BlogPost {}) = GT
-  compare (SomeArticle a@Publication {}) (SomeArticle b@Publication {}) = compare a b
+instance Ord SomePublishedArticle where
+  compare :: SomePublishedArticle -> SomePublishedArticle -> Ordering
+  compare (SomePublishedArticle a@BlogPost {}) (SomePublishedArticle b@BlogPost {}) = compare a b
+  compare (SomePublishedArticle BlogPost {}) (SomePublishedArticle Publication {}) = LT
+  compare (SomePublishedArticle Publication {}) (SomePublishedArticle BlogPost {}) = GT
+  compare (SomePublishedArticle a@Publication {}) (SomePublishedArticle b@Publication {}) = compare a b
 
-instance A.FromJSON SomeArticle where
-  parseJSON :: Yaml.Value -> Yaml.Parser SomeArticle
+instance A.FromJSON SomePublishedArticle where
+  parseJSON :: Yaml.Value -> Yaml.Parser SomePublishedArticle
   parseJSON =
     A.withObject "some article" $ \o -> do
       kind :: String <- o A..: "kind"
       case kind of
-        "blog post" -> SomeArticle <$> (A..:) @(Article 'BlogPostKind) o "article"
-        "publication" -> SomeArticle <$> (A..:) @(Article 'PublicationKind) o "article"
+        "blog post" -> SomePublishedArticle <$> (A..:) @(Article 'BlogPostKind 'PublishedKind) o "article"
+        "publication" -> SomePublishedArticle <$> (A..:) @(Article 'PublicationKind 'PublishedKind) o "article"
         _ -> fail "Expected blog post or publication"
 
-instance A.ToJSON SomeArticle where
-  toJSON :: SomeArticle -> Yaml.Value
-  toJSON (SomeArticle article) = case article of
+instance A.ToJSON SomePublishedArticle where
+  toJSON :: SomePublishedArticle -> Yaml.Value
+  toJSON (SomePublishedArticle article) = case article of
     BlogPost {} -> A.object ["kind" A..= ("blog post" :: String), "article" A..= article]
     Publication {} -> A.object ["kind" A..= ("publication" :: String), "article" A..= article]
 
 -- | helper data type for lists of articles of a given kind
-newtype ArticlesInfo kind = ArticlesInfo
-  { articles :: [Article kind]
+newtype ArticlesInfo kind status = ArticlesInfo
+  { articles :: [Article kind status]
   }
-  deriving stock (Generic, Eq, Ord, Show)
+  deriving stock (Generic)
 
-instance (A.ToJSON (Article kind)) => A.ToJSON (ArticlesInfo kind) where
-  toJSON :: (Yaml.ToJSON (Article kind)) => ArticlesInfo kind -> Yaml.Value
+deriving stock instance (Eq (PublicationField status)) => Eq (ArticlesInfo kind status)
+
+deriving stock instance (Eq (PublicationField status), Ord (PublicationField status)) => Ord (ArticlesInfo kind status)
+
+deriving stock instance (Show (PublicationField status)) => Show (ArticlesInfo kind status)
+
+instance (A.ToJSON (Article kind status)) => A.ToJSON (ArticlesInfo kind status) where
+  toJSON :: (Yaml.ToJSON (Article kind status)) => ArticlesInfo kind status -> Yaml.Value
   toJSON ArticlesInfo {..} = A.object ["articles" A..= articles]
 
-instance (A.FromJSON (Article kind)) => A.FromJSON (ArticlesInfo kind) where
-  parseJSON :: (Yaml.FromJSON (Article kind)) => Yaml.Value -> Yaml.Parser (ArticlesInfo kind)
+instance (A.FromJSON (Article kind status)) => A.FromJSON (ArticlesInfo kind status) where
+  parseJSON :: (Yaml.FromJSON (Article kind status)) => Yaml.Value -> Yaml.Parser (ArticlesInfo kind status)
   parseJSON =
     A.withObject "ArticlesInfo" $ \o ->
       ArticlesInfo <$> o A..: "articles"
@@ -697,28 +893,21 @@ instance (A.FromJSON (Article kind)) => A.FromJSON (ArticlesInfo kind) where
 -- | data type for tags
 data Tag = Tag
   { name :: TagName,
-    articles :: [SomeArticle],
+    articles :: [SomePublishedArticle],
     url :: String
   }
   deriving stock (Generic, Eq, Ord, Show)
 
+tagJSONOptions :: A.Options
+tagJSONOptions = A.defaultOptions {A.fieldLabelModifier = \case "name" -> "tag"; x -> x}
+
 instance A.ToJSON Tag where
   toJSON :: Tag -> Yaml.Value
-  toJSON Tag {..} =
-    A.object
-      [ "tag" A..= name,
-        "articles" A..= articles,
-        "url" A..= url
-      ]
+  toJSON = A.genericToJSON tagJSONOptions
 
 instance A.FromJSON Tag where
   parseJSON :: Yaml.Value -> Yaml.Parser Tag
-  parseJSON =
-    A.withObject "Tag" $ \o ->
-      Tag
-        <$> o A..: "tag"
-        <*> o A..: "articles"
-        <*> o A..: "url"
+  parseJSON = A.genericParseJSON tagJSONOptions
 
 newtype TagsInfo = TagsInfo
   { tags :: [Tag]
@@ -730,7 +919,7 @@ data FeedData = FeedData
   { title :: String,
     domain :: String,
     author :: String,
-    articles :: [SomeArticle],
+    articles :: [SomePublishedArticle],
     currentTime :: String,
     atomUrl :: String
   }
@@ -787,16 +976,17 @@ buildContact cfg =
       }
 
 -- | find and build all blog posts
-buildBlogPostList :: Config Identity -> Action [Article 'BlogPostKind]
+buildBlogPostList :: Config Identity -> Action [Article 'BlogPostKind 'PublishedKind]
 buildBlogPostList config = do
   blogPostPaths <- getDirectoryFiles "." ["site/posts//*.md", "site/posts//*.lhs"]
   blogPosts <- forP blogPostPaths (buildBlogPost config)
-  let blogPosts' = assignAdjacentArticles . sortOn (Down . parseDate . bpDate) $ blogPosts
-  _ <- forP blogPosts' (writeBlogPost config)
-  return blogPosts'
+  let published = mapMaybe extractPublished blogPosts
+      blogPosts' = assignAdjacentPublishedArticles . map fst . sortOn (Down . snd) $ published
+  _ <- forP blogPosts (writeBlogPost config) -- Write ALL posts, including drafts
+  return blogPosts' -- But only return published ones for lists/tags/feeds
 
 -- | build blog posts page
-buildBlogPosts :: Config Identity -> [Article 'BlogPostKind] -> Action ()
+buildBlogPosts :: Config Identity -> [Article 'BlogPostKind 'PublishedKind] -> Action ()
 buildBlogPosts config articles = do
   blogPostsTemplate <- Slick.compileTemplate' "site/templates/posts.html"
   let blogPostsInfo = ArticlesInfo {articles}
@@ -804,7 +994,7 @@ buildBlogPosts config articles = do
   writeFile' (runIdentity (outputFolder config) </> "posts.html") blogPostsHTML
 
 -- | build a single blog post
-buildBlogPost :: Config Identity -> FilePath -> Action (Article 'BlogPostKind)
+buildBlogPost :: Config Identity -> FilePath -> Action (SomeStatusArticle 'BlogPostKind)
 buildBlogPost config postSrcPath = cacheAction ("build" :: T.Text, postSrcPath) $ do
   postContent <- readFile' postSrcPath
   postData <- case takeExtension postSrcPath of
@@ -824,8 +1014,8 @@ buildBlogPost config postSrcPath = cacheAction ("build" :: T.Text, postSrcPath) 
   Slick.convert fullPostData
 
 -- | write blog post to file
-writeBlogPost :: Config Identity -> Article 'BlogPostKind -> Action ()
-writeBlogPost config post@BlogPost {..} = do
+writeBlogPost :: Config Identity -> SomeStatusArticle 'BlogPostKind -> Action ()
+writeBlogPost config (SomeStatusArticle post@BlogPost {..}) = do
   postTemplate <- Slick.compileTemplate' "site/templates/post.html"
   writeFile' (runIdentity (outputFolder config) </> bpUrl)
     . T.unpack
@@ -835,16 +1025,17 @@ writeBlogPost config post@BlogPost {..} = do
     $ post
 
 -- | find and build all publications
-buildPublicationList :: Config Identity -> Action [Article 'PublicationKind]
+buildPublicationList :: Config Identity -> Action [Article 'PublicationKind 'PublishedKind]
 buildPublicationList config = do
   publicationPaths <- getDirectoryFiles "." ["site/publications//*.md"]
   publications <- forP publicationPaths (buildPublication config)
-  let publications' = assignAdjacentArticles . sortOn (Down . parseDate . pubDate) $ publications
-  _ <- forP publications' (writePublication config)
-  return publications'
+  let published = mapMaybe extractPublished publications
+      publications' = assignAdjacentPublishedArticles . map fst . sortOn (Down . snd) $ published
+  _ <- forP publications (writePublication config) -- Write ALL publications, including drafts
+  return publications' -- But only return published ones for lists/tags/feeds
 
 -- | build publications page
-buildPublications :: Config Identity -> [Article 'PublicationKind] -> Action ()
+buildPublications :: Config Identity -> [Article 'PublicationKind 'PublishedKind] -> Action ()
 buildPublications config articles = do
   publicationsTemplate <- Slick.compileTemplate' "site/templates/publications.html"
   let publicationsInfo = ArticlesInfo {articles}
@@ -852,7 +1043,7 @@ buildPublications config articles = do
   writeFile' (runIdentity (outputFolder config) </> "publications.html") publicationsHTML
 
 -- | build a single publication
-buildPublication :: Config Identity -> FilePath -> Action (Article 'PublicationKind)
+buildPublication :: Config Identity -> FilePath -> Action (SomeStatusArticle 'PublicationKind)
 buildPublication config publicationSrcPath = cacheAction ("build" :: T.Text, publicationSrcPath) $ do
   publicationContent <- readFile' publicationSrcPath
   publicationData <- markdownToHTML . T.pack $ publicationContent
@@ -865,8 +1056,8 @@ buildPublication config publicationSrcPath = cacheAction ("build" :: T.Text, pub
   Slick.convert fullPublicationData
 
 -- | write publication to file
-writePublication :: Config Identity -> Article 'PublicationKind -> Action ()
-writePublication config publication@Publication {..} = do
+writePublication :: Config Identity -> SomeStatusArticle 'PublicationKind -> Action ()
+writePublication config (SomeStatusArticle publication@Publication {..}) = do
   publicationTemplate <- Slick.compileTemplate' "site/templates/publication.html"
   writeFile' (runIdentity (outputFolder config) </> pubUrl)
     . T.unpack
@@ -876,23 +1067,23 @@ writePublication config publication@Publication {..} = do
     $ publication
 
 -- | find all tags and build tag pages
-buildTagList :: Config Identity -> [SomeArticle] -> Action [Tag]
+buildTagList :: Config Identity -> [SomePublishedArticle] -> Action [Tag]
 buildTagList config articles =
   forP (Map.toList tags) (buildTag config . mkTag)
   where
-    tags = Map.unionsWith (<>) ((`withSomeArticle` collectTags) <$> articles)
-    collectTags :: forall kind. Article kind -> Map TagName [SomeArticle]
-    collectTags post@BlogPost {bpTagNames} = Map.fromList $ (,pure $ SomeArticle post) <$> itemsToList bpTagNames
-    collectTags publication@Publication {pubTagNames} = Map.fromList $ (,pure $ SomeArticle publication) <$> itemsToList pubTagNames
+    tags = Map.unionsWith (<>) ((`withSomePublishedArticle` collectTags) <$> articles)
+    collectTags :: forall kind. Article kind 'PublishedKind -> Map TagName [SomePublishedArticle]
+    collectTags post@BlogPost {bpTagNames} = Map.fromList $ (,pure $ SomePublishedArticle post) <$> itemsToList bpTagNames
+    collectTags publication@Publication {pubTagNames} = Map.fromList $ (,pure $ SomePublishedArticle publication) <$> itemsToList pubTagNames
     mkTag (tagName@(TagName name), articles') =
       Tag
         { name = tagName,
-          articles = sortOn (`withSomeArticle` comp) articles',
+          articles = sortOn (`withSomePublishedArticle` comp) articles',
           url = "tags/" <> name <> ".html"
         }
-    comp :: forall kind. Article kind -> Down UTCTime
-    comp Publication {..} = Down . parseDate $ pubDate
-    comp BlogPost {..} = Down . parseDate $ bpDate
+    comp :: forall kind. Article kind 'PublishedKind -> Down UTCTime
+    comp Publication {pubPublication = PubDate date} = Down (dateToUTC date)
+    comp BlogPost {bpPublication = PubDate date} = Down (dateToUTC date)
 
 -- | build tags page
 buildTags :: Config Identity -> [Tag] -> Action ()
@@ -967,20 +1158,12 @@ copyStaticFiles config = do
       let dest = runIdentity (outputFolder config) </> dropDirectory1 src
       copyFileChanged src dest
 
--- | parse human-readable date from an article
-parseDate :: String -> UTCTime
-parseDate = parseTimeOrError True defaultTimeLocale "%b %e, %Y"
-
--- | format a date in ISO 8601 format
-formatDate :: String -> String
-formatDate = toIsoDate . parseDate
-
 -- | convert UTC time to RFC 3339 format
 toIsoDate :: UTCTime -> String
 toIsoDate = iso8601Show
 
 -- | build feed
-buildFeed :: Config Identity -> [SomeArticle] -> Action ()
+buildFeed :: Config Identity -> [SomePublishedArticle] -> Action ()
 buildFeed config articles = do
   now <- liftIO getCurrentTime
   let feedData =
@@ -988,16 +1171,12 @@ buildFeed config articles = do
           { title = runIdentity . siteTitle . siteMeta $ config,
             domain = show . runIdentity . siteBaseUrl . siteMeta $ config,
             author = runIdentity . siteAuthor . siteMeta $ config,
-            articles = (`withSomeArticle` toFeedPost) <$> articles,
+            articles = somePublishedArticleToUTC <$> articles,  -- Convert dates to UTC for Atom feed
             currentTime = toIsoDate now,
             atomUrl = "/feed.xml"
           }
   feedTemplate <- Slick.compileTemplate' "site/templates/feed.xml"
   writeFile' (runIdentity (outputFolder config) </> "feed.xml") . T.unpack $ Slick.substitute feedTemplate (A.toJSON feedData)
-  where
-    toFeedPost :: forall kind. Article kind -> SomeArticle
-    toFeedPost p@BlogPost {..} = SomeArticle $ p {bpDate = formatDate bpDate}
-    toFeedPost p@Publication {..} = SomeArticle $ p {pubDate = formatDate pubDate}
 
 -- | build site using all actions
 buildRules :: Config Identity -> Action ()
@@ -1007,7 +1186,7 @@ buildRules config = do
   buildBlogPosts config posts
   publications <- buildPublicationList config
   buildPublications config publications
-  let articles = (SomeArticle <$> posts) <> (SomeArticle <$> publications)
+  let articles = (SomePublishedArticle <$> posts) <> (SomePublishedArticle <$> publications)
   tags <- buildTagList config articles
   buildTags config tags
   buildContact config
@@ -1025,13 +1204,16 @@ data GitHash
 -- | get git hash of last commit of a file
 getGitHash :: FilePath -> Action GitHash
 getGitHash path = do
-  let cmdLine = unwords
-        [ "git"
-        , "log"
-        , "--pretty=format:%h%n%ci%n%an%n%s"
-        , "-n", "1"
-        , "--", path
-        ]
+  let cmdLine =
+        unwords
+          [ "git",
+            "log",
+            "--pretty=format:%h%n%ci%n%an%n%s",
+            "-n",
+            "1",
+            "--",
+            path
+          ]
   Stdout (gitInfo :: String) <- cmd cmdLine
   case lines gitInfo of
     [hash, date, author, subject] -> pure $ Committed hash date author subject

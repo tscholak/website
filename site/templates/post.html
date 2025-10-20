@@ -21,7 +21,9 @@
             {{/items}}
         </p>
         {{/tags}}
-        <p>Posted on {{date}}</p>
+        {{#publication.date}}
+        <p>Posted on {{publication.date}}</p>
+        {{/publication.date}}
         <p>{{readTime}} min read</p>
         {{{teaser}}}
         {{{content}}}
@@ -43,7 +45,9 @@
             <div>
                 <h1>Next Post</h1>
                 <h2>{{title}}</h2>
-                <p>{{date}}</p>
+                {{#publication.date}}
+                <p>{{publication.date}}</p>
+                {{/publication.date}}
                 <p>{{{teaser}}}</p>
             </div>
         </a>
@@ -53,7 +57,9 @@
             <div>
                 <h1>Previous Post</h1>
                 <h2>{{title}}</h2>
-                <p>{{date}}</p>
+                {{#publication.date}}
+                <p>{{publication.date}}</p>
+                {{/publication.date}}
                 <p>{{{teaser}}}</p>
             </div>
         </a>

@@ -21,7 +21,9 @@
             </div>
         </p>
         <p><em>{{journal}}</em></p>
-        <p>Published on {{date}}</p>
+        {{#publication.date}}
+        <p>Published on {{publication.date}}</p>
+        {{/publication.date}}
         <p>Official link: <a href="{{link}}">{{link}}</a></p>
         <p>
             {{#pdf}}
@@ -68,7 +70,9 @@
             <div>
                 <h1>Next Publication</h1>
                 <h2>{{title}}</h2>
-                <p>{{date}}</p>
+                {{#publication.date}}
+                <p>{{publication.date}}</p>
+                {{/publication.date}}
                 <p>{{tldr}}</p>
             </div>
         </a>
@@ -78,7 +82,9 @@
             <div>
                 <h1>Previous Publication</h1>
                 <h2>{{title}}</h2>
-                <p>{{date}}</p>
+                {{#publication.date}}
+                <p>{{publication.date}}</p>
+                {{/publication.date}}
                 <p>{{tldr}}</p>
             </div>
         </a>

@@ -25,7 +25,9 @@ author:
 - Luke Zettlemoyer
 - Tao Yu
 journal: "arXiv:2201.05966 [cs.CL]"
-date: Jan 16, 2022
+publication:
+  status: published
+  date: Jan 16, 2022
 tldr: "Let's unify all structured-knowledge grounded tasks into the same text-to-text framework!"
 image: unified-skg.png
 tags:

@@ -1,6 +1,8 @@
 ---
 title: "Unrecurse -- A Recursive Function That Doesn't Recurse"
-date: Jan 20, 2022
+publication:
+  status: published
+  date: Jan 20, 2022
 teaser: >
   Have you ever wanted to write a recursive function and wondered
   what would happen if someone took away recursion from Haskell?
