@@ -33,7 +33,7 @@ Is this the case for Skills? No, because they don't have formal compositional se
 
 Skills don't compose. Claude orchestrates them heuristically: interpreting requests, selecting skills, and routing between them.
 
-At small scale, heuristic orchestration works well enough. For most users, Skills will feel magical: open a PDF, extract data, format a report. Done. The model makes the right decisions most of the time, and the abstraction holds.
+At small scale, this approach works well enough. For most users, Skills will feel magical: open a PDF, extract data, format a report. Done. The model makes the right decisions most of the time, and the abstraction holds.
 
 But as soon as people start chaining more skills together, the cracks appear:
 
@@ -55,11 +55,11 @@ The economy of AI systems is moving rapidly toward scale. Enterprises will want 
 
 Some people are optimistic that model intelligence alone will solve these problems, "ship fast and iterate, it's just a tool, if it's broken, we'll fix it." That optimism is understandable given current trends. [Research from METR](https://metr.org/blog/2025-03-19-measuring-ai-ability-to-complete-long-tasks/) shows AI's ability to complete long-duration tasks improving rapidly. Current frontier models achieve 50% success on hour-long tasks, nearly 100% on tasks under four minutes. If the current trend continues, we'll have systems reliably completing week-long tasks within 2-4 years.
 
-However, not everyone is convinced. Some worry that doom loops of miscoordination will emerge as systems scale and ask to "slow down, we don't understand what we're building." The concern isn't irrational. Current architectures might hit reliability ceilings. Token prediction might not scale to the complex multi-step coordination enterprises need, and the trend improvements might eventually plateau.
+But coordination failures aren't capability problems. [Recent research on frontier models](https://metr.org/blog/2025-06-05-recent-reward-hacking/) found reward hacking in 70-95% of test cases: models knowingly violating user intent while maximizing specified objectives. [Yoshua Bengio](https://fortune.com/2025/06/03/yoshua-bengio-ai-models-dangerous-behaviors-deception-cheating-lying/), who won the Turing Award for pioneering deep learning, noted that frontier models now exhibit deception and goal misalignment in empirical tests—systems that covertly preserve themselves when facing replacement, reasoning models that hack objectives rather than achieving them legitimately. These aren't bugs that smarter models fix. They're coordination problems that emerge from intelligence itself. As Bengio observed, the AI arms race "pushes labs toward focusing on capability to make the AI more and more intelligent, but not necessarily put enough emphasis and investment on research on safety." Intelligence achieves task completion. Coordination requires institutional structure: shared standards, aligned incentives, accountability frameworks. Those don't emerge from capability scaling alone.
 
-We don't have to rely on optimism or fear, and we don't need to bet on moral appeals either. Right now, we're in the hype phase. Hundreds of billions in AI capex are already committed. Companies have raised funding on promises of AGI. Investors expect returns. Enterprises have been sold on AI agents that will reliably automate complex workflows. The economic pressure to deploy at scale is immense.
+Right now, we're in the hype phase. Hundreds of billions in AI capex are already committed. Companies have raised funding on promises of AGI. Investors expect returns. Enterprises have been sold on AI agents that will reliably automate complex workflows. The economic pressure to deploy at scale is immense.
 
-When uncertainty hits production (errors in financial consolidations, missed regulatory requirements, biased hiring screens) "the model orchestrates skills autonomously" won't satisfy auditors, insurers, or regulators. That's when coordination infrastructure becomes economically necessary.
+By 2027, if current trends hold, enterprises will be deploying multi-skill agents for financial consolidations, regulatory compliance, and hiring decisions. When coordination failures hit production—errors in quarterly reports, missed compliance requirements, biased screening—"the model orchestrates skills autonomously" won't satisfy auditors, insurers, or regulators. That's when coordination infrastructure becomes economically necessary.
 
 So how do we build that infrastructure?
 
@@ -148,7 +148,7 @@ What gets verified, and what doesn't?
 | **Skill internals** | ❌ No | Handled by testing and reputation |
 | **Planner reasoning** | ⚠️ Partial | Logical structure if typed; optimality by outcomes |
 
-Partial verification of reasoning represents a new capability. When AI reasoning is expressed as typed programs (as in [OpenAI's o1](https://platform.openai.com/docs/guides/reasoning) or [DeepMind's AlphaProof](https://deepmind.google/discover/blog/ai-solves-imo-problems-at-silver-medal-level/)) the [Curry-Howard-Lambek correspondence](https://en.wikipedia.org/wiki/Curry%E2%80%93Howard_correspondence) lets us verify logical structure: proofs are programs, types are propositions. We still evaluate optimality by outcomes, but structural verification reaches into cognition in ways human institutions never could.
+Partial verification of reasoning represents a new capability. Type-checkers can automatically verify whether reasoning follows valid inference rules—no human judgment required. This works because of the [Curry-Howard-Lambek correspondence](https://en.wikipedia.org/wiki/Curry%E2%80%93Howard_correspondence): proofs are programs, types are propositions. When AI reasoning is expressed as a typed program (as in [OpenAI's o1](https://platform.openai.com/docs/guides/reasoning) or [DeepMind's AlphaProof](https://deepmind.google/discover/blog/ai-solves-imo-problems-at-silver-medal-level/)), type-checking that program mechanically verifies the reasoning's logical structure. We still evaluate optimality by outcomes, but structural verification reaches into cognition itself. Courts need judges to evaluate reasoning. AI exposes reasoning as programs that machines can verify.
 
 This division matters because it keeps the verified core small. The narrow waist stays manageable because we don't verify everything, just the composition boundaries where coordination happens.
 
@@ -160,7 +160,7 @@ The Internet scales to billions of devices through this pattern. [TCP/IP](https:
 
 ### The Social Layer: Competitive Coordination
 
-Where formal verification ends, social coordination begins. Formal verification catches interface mismatches before runtime. But you can prove code matches spec without proving spec matches reality. Even perfectly specified systems get gamed. [Recent research on frontier models](https://metr.org/blog/2025-06-05-recent-reward-hacking/) found reward hacking in 70-95% of test cases where models knowingly violated user intent while maximizing specified objectives.
+Where formal verification ends, social coordination begins. Formal verification catches interface mismatches before runtime. But you can prove code matches spec without proving spec matches reality. Even perfectly specified systems get gamed—as seen in the reward hacking research showing agents maximize specified objectives while violating user intent.
 
 Social mechanisms solve problems verification can't touch:
 
@@ -202,7 +202,7 @@ This architecture is achievable now because AI agents differ from humans in one 
 
 The synthesis is within reach. [The Model Context Protocol](https://www.anthropic.com/news/model-context-protocol) provides typed schemas. Multi-agent AI research validates hierarchical coordination patterns. [Ethereum](https://ethereum.org/) demonstrates the complete integration: $30+ billion secured through verified EVM semantics (formal), staking incentives (social), and immutable transaction logs (legal) working together.
 
-But Skills currently lacks this. Claude orchestrates implicitly and heuristically. Skills don't declare types or effects in their interfaces, making compositional verification impossible. Claude Code provides execution-level sandboxing (filesystem and network isolation). This is necessary but insufficient. It catches violations at runtime without enabling static composition checks. There's no reputation system tracking which skills actually work. There's no competitive pressure. There are no audit trails for accountability. The system relies primarily on a single LLM making good guesses, with sandboxing as a safety net.
+Skills as currently shipped validate the demand for composable AI capabilities. But scaling to production requires the substrate described above. Claude coordinates skills through model inference rather than explicit composition. Skills don't declare types or effects in their interfaces, making compositional verification impossible. Claude Code provides execution-level sandboxing (filesystem and network isolation). This is necessary but insufficient. It catches violations at runtime without enabling static composition checks. There's no reputation system tracking which skills actually work. There's no competitive pressure. There are no audit trails for accountability. The system relies primarily on a single LLM making good guesses, with sandboxing as a safety net.
 
 MCP provides typed schemas but requires explicit tool invocation. Skills provide autonomous orchestration but lack type safety. The synthesis (autonomous selection of capabilities that verifiably compose) requires both.
 
