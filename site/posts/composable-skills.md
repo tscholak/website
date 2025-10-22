@@ -1,9 +1,10 @@
 ---
 title: "Skills, Composition, and the Coordination Problem"
 publication:
-  status: draft
+  status: published
+  date: Oct 22, 2025
 teaser: >
-  Anthropic released [Skills](https://www.anthropic.com/news/skills) this week, and the response was immediate: finally, composable AI capabilities! Build once, reuse anywhere. Give Claude folders of instructions and scripts, and it'll load what it needs automatically. Modular, portable, efficient. We'll have reliable AI systems using hundreds or thousands or hundreds of thousands of skills in no time.
+  Anthropic released [Skills](https://www.anthropic.com/news/skills) last week, and the response was immediate: finally, composable AI capabilities! Build once, reuse anywhere. Give Claude folders of instructions and scripts, and it'll load what it needs automatically. Modular, portable, efficient. We'll have reliable AI systems using hundreds or thousands or hundreds of thousands of skills in no time.
 
   There's just one problem: Skills aren't actually composable, and that creates a coordination problem that needs to be addressed urgently.
 tags:
@@ -19,7 +20,7 @@ At startup, Claude indexes every available skill by name and description. When y
 
 Each skill is self-contained and can be reused across contexts (Claude Desktop, Claude Code, API calls), which gives them the same feel as plugins or microservices. They even "stack" automatically when several are relevant.
 
-People are excited because this *feels* like composition: small, independent modules that can be combined for larger workflows. But from a *formal* perspective (the one that lets you build reliable systems), it isn't composition at all, and that creates serious coordination challenges.
+[People](https://x.com/barry_zyj/status/1978860549837299948) [are](https://x.com/alexalbert__/status/1978877514903884044) [excited](https://simonwillison.net/2025/Oct/16/claude-skills/) because this *feels* like composition: small, independent modules that can be combined for larger workflows. But from a *formal* perspective (the one that lets you build reliable systems), it isn't composition at all, and that creates serious coordination challenges.
 
 ## What Skills Are Not
 
