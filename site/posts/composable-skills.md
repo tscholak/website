@@ -16,9 +16,9 @@ This is a follow-up to ["Everyone's Arguing About the Wrong Abstraction Layer"](
 
 ## What Skills Are
 
-At startup, Claude indexes every available skill by name and description. When you make a request, it decides which ones to load, in what order, and how to coordinate them. For example, it might pull in your brand guidelines, financial-reporting templates, and presentation formatting skill to produce a quarterly deck.
+At startup, Claude indexes every available Skill by name and description. When you make a request, it decides which ones to load, in what order, and how to coordinate them. For example, it might pull in your brand guidelines, financial-reporting templates, and presentation formatting Skill to produce a quarterly deck.
 
-Each skill is self-contained and can be reused across contexts (Claude Desktop, Claude Code, API calls), which gives them the same feel as plugins or microservices. They even "stack" automatically when several are relevant.
+Each Skill is self-contained and can be reused across contexts (Claude Desktop, Claude Code, API calls), which gives them the same feel as plugins or microservices. They even "stack" automatically when several are relevant. Under the hood, a Skill is a folder containing markdown instructions, executable scripts, and supporting resources, making them closer to a module or library than a single function.
 
 [People](https://x.com/barry_zyj/status/1978860549837299948) [are](https://x.com/alexalbert__/status/1978877514903884044) [excited](https://simonwillison.net/2025/Oct/16/claude-skills/) because this *feels* like composition: small, independent modules that can be combined for larger workflows. But from a *formal* perspective (the one that lets you build reliable systems), it isn't composition at all, and that creates serious coordination challenges.
 
@@ -32,15 +32,15 @@ Is this the case for Skills? No, because they don't have formal compositional se
 * There's no type system or contracts, hence no type safety: In a chain of actions, the output from skill A may not match the inputs of skill B.
 * There's no associativity. `(A + B) + C` may behave differently than `A + (B + C)`. Order of combination matters.
 
-Skills don't compose. Claude orchestrates them heuristically: interpreting requests, selecting skills, and routing between them.
+Skills don't compose. Claude orchestrates them heuristically: interpreting requests, selecting Skills, and routing between them.
 
 At small scale, this approach works well enough. For most users, Skills will feel magical: open a PDF, extract data, format a report. Done. The model makes the right decisions most of the time, and the abstraction holds.
 
-But as soon as people start chaining more skills together, the cracks appear:
+But as soon as people start chaining more Skills together, the cracks appear:
 
 * Skill A and B work, but A, B, and C in combination fail unpredictably.
-* Updating one skill breaks workflows you didn't know were using it.
-* The same workflow can yield very different results depending on what other skills are being used or what ran before.
+* Updating one Skill breaks workflows you didn't know were using it.
+* The same workflow can yield very different results depending on what other Skills are being used or what ran before.
 
 Without formal structure, we can't reason about how Skills behave. We can only test, and even then, the tests aren't stable.
 
@@ -76,7 +76,7 @@ Formal guarantees make coordination *tractable*. They prevent the dumbest failur
 
 The specification problem is fundamental. [The DAO smart contract](https://blog.chain.link/reentrancy-attacks-and-the-dao-hack/) was formally designed with explicit interfaces, yet lost $50-70 million to a reentrancy attack that exploited the gap between intended and actual behavior. The code did exactly what the specification said. The specification said the wrong thing.
 
-Formal methods shine at well-bounded problems: protocol correctness, safety-critical control loops, system invariants. Skills are dynamic behaviors embedded in messy human workflows where "correct" isn't even well-defined. The complexity comes from the world.
+Formal methods shine at well-bounded problems: protocol correctness, safety-critical control loops, system invariants. AI skills are dynamic behaviors embedded in messy human workflows where "correct" isn't even well-defined. The complexity comes from the world.
 
 The scalability barrier is fundamental. [Edmund Clarke](https://amturing.acm.org/award_winners/clarke_1167964.cfm), who won the Turing Award for inventing [model checking](https://en.wikipedia.org/wiki/Model_checking), identified the core problem: as state variables increase, the state space grows exponentially. For n processes with m states each, composition may have m^n states. [seL4](https://sel4.systems/) (the most successfully verified operating system kernel) required 20 person-years to verify 8,700 lines of C code with 200,000 lines of proof. It's a remarkable achievement for a microkernel. It doesn't scale to coordinating hundreds of dynamic skills.
 
@@ -108,14 +108,13 @@ These are genuine advantages. But human institutions have a critical limitation:
 
 ## What This Actually Requires
 
-Skills need a three-layer structure combining formal verification, social coordination, and legal accountability. Each layer addresses problems the others cannot solve.
+Skills need a three-layer structure combining formal verification, social coordination, and credit assignment. Each layer addresses problems the others cannot solve.
 
 ```
-APPLICATIONS
-  Reports • ETL • Customer Ops • Research Assistants
-         ↓ task request
+APPLICATIONS: Users & Tasks
+         ↓ request
 ┌──────────────────────────────────────────────────────┐
-│ FORMAL LAYER: Plan Checker (verified waist)          │
+│ FORMAL LAYER: Plan Synthesis & Verification          │
 │  • type-checked skill composition                    │
 │  • resource budgets enforced                         │
 │  • isolation + capability gating                     │
@@ -127,16 +126,16 @@ APPLICATIONS
 │  • competitive selection (quality vs. cost)          │
 │  • version compatibility tracking                    │
 └──────────────────────────────────────────────────────┘
-         ↓ violations, failures
+         ↓ outcomes              ↑ credit signals
 ┌──────────────────────────────────────────────────────┐
-│ LEGAL LAYER: Audit & Accountability                  │
-│  • signed execution traces                           │
-│  • liability assignment                              │
-│  • compliance reporting                              │
+│ LEGAL LAYER: Credit Assignment                       │
+│  • forensics (causal attribution)                    │
+│  • fault allocation (credit signals)                 │
+│  • remediation (incentive adjustment)                │
 └──────────────────────────────────────────────────────┘
 ```
 
-Here's how they work together. An application submits a task. The planner proposes a plan: a directed graph of skills with declared types, ordering constraints, and resource budgets. The **formal layer** performs static checks (type unification, dependency ordering, cycle detection, resource admission). If well-formed, execution proceeds under runtime monitors. The **social layer** tracks which skills actually deliver quality results and updates reputation scores. The **legal layer** logs every decision to a signed audit trail for debugging and compliance. Each layer has specific responsibilities. None can be skipped.
+Here's how they work together. An application submits a task. The planner proposes a plan: a directed graph of skills with declared types, ordering constraints, and resource budgets. The **formal layer** performs static checks (type unification, dependency ordering, cycle detection, resource admission). If well-formed, execution proceeds under runtime monitors. The **social layer** tracks which skills actually deliver quality results and updates reputation scores. The **legal layer** performs forensic analysis on failures to assign credit signals that feed back into reputation. Each layer has specific responsibilities. None can be skipped.
 
 ### The Formal Layer: Verified Composition
 
@@ -151,62 +150,74 @@ What gets verified, and what doesn't?
 | **Skill internals** | ❌ No | Handled by testing and reputation |
 | **Planner reasoning** | ⚠️ Partial | Logical structure if typed; optimality by outcomes |
 
-Partial verification of reasoning represents a new capability. Type-checkers can automatically verify whether reasoning follows valid inference rules, no human judgment required. This works because of the [Curry-Howard-Lambek correspondence](https://en.wikipedia.org/wiki/Curry%E2%80%93Howard_correspondence): proofs are programs, types are propositions. When AI reasoning is expressed as a typed program (as in [OpenAI's o1](https://platform.openai.com/docs/guides/reasoning) or [DeepMind's AlphaProof](https://deepmind.google/discover/blog/ai-solves-imo-problems-at-silver-medal-level/)), type-checking that program mechanically verifies the reasoning's logical structure. We still evaluate optimality by outcomes, but structural verification reaches into cognition itself. Courts need judges to evaluate reasoning. AI exposes reasoning as programs that machines can verify.
-
 This division matters because it keeps the verified core small. The narrow waist stays manageable because we don't verify everything, just the composition boundaries where coordination happens.
 
-Consider a workflow: PDF -> Table -> SQL. Skills declare their types: `pdf.extractTables` accepts PDF and returns `[Table]`. `table.toSql` accepts `[Table]` and returns SQL. The planner proposes a two-step DAG. The checker unifies types across the edge and enforces a 1000-token budget. If `pdf.extractTables` returns mixed schemas but `table.toSql` expects uniform structure, the checker rejects the plan unless a normalization step is inserted. Type safety prevents the runtime failure.
+Consider a workflow: PDF -> Table -> SQL. skills declare their types: `pdf.extractTables` accepts PDF and returns `[Table]`. `table.toSql` accepts `[Table]` and returns SQL. The planner proposes a two-step DAG. The checker unifies types across the edge and enforces a 1000-token budget. If `pdf.extractTables` returns mixed schemas but `table.toSql` expects uniform structure, the checker rejects the plan unless a normalization step is inserted. Type safety prevents the runtime failure.
 
-Side effects require the same two-layer approach. Skills declare effects in their interfaces (`pdf.extractTables: {FileSystem.read}`, `db.write: {Database.write}`). The Plan Checker statically verifies each skill's effect declaration. At runtime, OS sandboxing enforces these boundaries. [Claude Code's sandboxing](https://www.anthropic.com/engineering/claude-code-sandboxing) demonstrates the runtime layer: filesystem and network isolation through OS primitives. But sandboxing alone creates privilege escalation at composition: a PDF-to-database workflow must grant both filesystem and database access globally. Effect declarations enable least privilege: runtime enforcement ensures the PDF skill executes with only `{FileSystem.read}`, the DB skill with only `{Database.write}`, despite both running in the same workflow. Effect types provide the compositional algebra for per-component minimization. Sandboxing provides the enforcement.
+Side effects require the same two-layer approach. skills declare effects in their interfaces (`pdf.extractTables: {FileSystem.read}`, `db.write: {Database.write}`). The Plan Checker statically verifies each skill's effect declaration. At runtime, OS sandboxing enforces these boundaries. [Claude Code's sandboxing](https://www.anthropic.com/engineering/claude-code-sandboxing) demonstrates the runtime layer: filesystem and network isolation through OS primitives. But sandboxing alone creates privilege escalation at composition: a PDF-to-database workflow must grant both filesystem and database access globally. Effect declarations enable least privilege: runtime enforcement ensures the PDF skill executes with only `{FileSystem.read}`, the DB skill with only `{Database.write}`, despite both running in the same workflow. Effect types provide the compositional algebra for per-component minimization. Sandboxing provides the enforcement.
 
-The Internet scales to billions of devices through this pattern. [TCP/IP](https://datatracker.ietf.org/doc/html/rfc9293) provides minimal guarantees at the protocol layer (IP) that enable maximum diversity at the edges, with [IETF](https://www.ietf.org/) governance handling disputes and evolving standards. [seL4](https://sel4.systems/) demonstrates the same. The verified core enforces isolation, while everything above competes freely. [AWS proved this works](https://cacm.acm.org/magazines/2015/4/184701-how-amazon-web-services-uses-formal-methods/fulltext) for distributed systems: TLA+ specifications (200-1000 lines each) caught critical bugs in DynamoDB requiring 35 steps to trigger. These are bugs that would never surface in testing. The npm ecosystem's [15,000+ malicious packages](https://thehackernews.com/2024/12/thousands-download-malicious-npm.html) show what happens without this discipline. For Skills: verify how they compose, not what each does internally.
+The narrow waist approach (verifying composition boundaries while leaving components free to vary) is how successful systems scale. The Internet scales to billions of devices through this pattern. [TCP/IP](https://datatracker.ietf.org/doc/html/rfc9293) provides minimal guarantees at the protocol layer (IP) that enable maximum diversity at the edges, with [IETF](https://www.ietf.org/) governance handling disputes and evolving standards. [seL4](https://sel4.systems/) demonstrates the same. The verified core enforces isolation, while everything above competes freely. [AWS proved this works](https://cacm.acm.org/magazines/2015/4/184701-how-amazon-web-services-uses-formal-methods/fulltext) for distributed systems: TLA+ specifications (200-1000 lines each) caught critical bugs in DynamoDB requiring 35 steps to trigger. These are bugs that would never surface in testing. The npm ecosystem's [15,000+ malicious packages](https://thehackernews.com/2024/12/thousands-download-malicious-npm.html) show what happens without this discipline. For skills: verify how they compose, not what each does internally.
+
+One frontier deserves attention: verifying the planner's reasoning itself. When AI reasoning is expressed as a typed program (as in [OpenAI's o1](https://platform.openai.com/docs/guides/reasoning) or [DeepMind's AlphaProof](https://deepmind.google/discover/blog/ai-solves-imo-problems-at-silver-medal-level/)), type-checking mechanically verifies logical structure through the [Curry-Howard correspondence](https://en.wikipedia.org/wiki/Curry%E2%80%93Howard_correspondence). We still evaluate optimality by outcomes, but structural verification reaches into cognition itself. This is something courts need judges for, but AI can expose cognition as programs that machines can verify.
 
 ### The Social Layer: Competitive Coordination
 
-Where formal verification ends, social coordination begins. Formal verification catches interface mismatches before runtime. But you can prove code matches spec without proving spec matches reality. Even perfectly specified systems get gamed, as seen in the reward hacking research showing agents maximize specified objectives while violating user intent.
+Formal verification ensures skills compose correctly, but it can't determine which composition is best or whether specifications capture actual requirements. You can prove code matches spec without proving spec matches reality. Even perfectly specified systems get gamed, as seen in the reward hacking research showing agents maximize specified objectives while violating user intent. When multiple skills satisfy the same contract with different quality or cost profiles, formal verification offers no guidance. The social layer fills this gap through market-like selection mechanisms.
 
-Social mechanisms solve problems verification can't touch:
+**Reputation and competitive selection.** Track success rates, latency, and cost per skill. Bad performers decay through disuse. Good ones capture market share. [eBay demonstrates](https://link.springer.com/article/10.1007/s10683-006-4309-2) reputation systems create an 8.1% price premium for trusted sellers. These are quantifiable incentives for good behavior.
 
-**Reputation and competitive selection.** Track success rates, latency, and cost per skill. Bad performers decay through disuse. Good ones capture market share. [eBay demonstrates](https://link.springer.com/article/10.1007/s10683-006-4309-2) reputation systems create an 8.1% price premium for trusted sellers. These are quantifiable incentives for good behavior. For Skills: planner selects based on quality/cost tradeoff, and reputation scores affect selection probability.
+Consider a data extraction skill that passes all formal checks but consistently produces edge-case formats that downstream skills handle poorly. Verification sees: types match, contracts satisfied. But outcomes reveal quality issues. Over 1000 workflows, its reputation decays from 0.85 to 0.32, dropping its selection probability proportionally. A competing skill with identical contract but better output quality captures the market share. No human intervention required. The system learns which implementations actually work.
 
-**Evolutionary dynamics under institutional selection.** Reputation scores provide fitness signals for automated skill optimization. Frameworks like [DSPy](https://github.com/stanfordnlp/dspy) already demonstrate prompt refinement through programmatic variation and outcome evaluation. Applied to Skills: the formal layer ensures evolved variations still compose correctly, the social layer provides selection pressure through reputation (better skills gain market share, poor mutations lose selection probability), and the legal layer tracks provenance. Skills improve through variation and selection, but within institutional bounds that prevent runaway optimization.
+**Evolutionary dynamics under institutional selection.** Reputation scores provide fitness signals for automated skill optimization. Frameworks like [DSPy](https://github.com/stanfordnlp/dspy) already demonstrate prompt refinement through programmatic variation and outcome evaluation. Applied to skills: the formal layer ensures evolved variations still compose correctly, the social layer provides selection pressure through reputation (better skills gain market share, poor mutations lose selection probability), and the legal layer tracks provenance. skills improve through variation and selection, but within institutional bounds that prevent runaway optimization.
 
-**Hierarchical coordination patterns.** As agent populations grow, certain organizational structures emerge because they solve computational problems. Multi-agent AI research validates hierarchical patterns reduce communication overhead from O(n²) to O(n log n) while improving performance. Boss-Worker, Actor-Critic, hierarchical orchestration are proven patterns. For Skills: complex workflows naturally decompose into coordinator skills that delegate to specialist skills recursively.
+**Hierarchical coordination patterns.** As agent populations grow, certain organizational structures emerge because they solve computational problems. Multi-agent AI research validates hierarchical patterns reduce communication overhead from O(n²) to O(n log n) while improving performance. Boss-Worker, Actor-Critic, hierarchical orchestration are proven patterns. For skills: complex workflows naturally decompose into coordinator skills that delegate to specialist skills recursively.
 
-**Version compatibility tracking.** The registry learns which skills actually work together in production. When Skill A updates, the system knows which downstream Skills are affected. For Skills: automatic deprecation warnings, migration paths, backward compatibility enforcement.
+**Version compatibility tracking.** The registry learns which skills actually work together in production. When skill A updates, the system knows which downstream skills are affected. For skills: automatic deprecation warnings, migration paths, backward compatibility enforcement.
 
-### The Legal Layer: Accountability and Trust
+### The Legal Layer: Credit Assignment for Multi-Agent Learning
 
-Where social coordination produces outcomes, legal mechanisms assign responsibility. Legal mechanisms provide accountability when the other layers fail. Without this, neither verification nor reputation suffices. A formally verified system with misaligned incentives won't be used, and a well-coordinated system with exploitable bugs will be attacked.
+Reputation mechanisms tell us which skills work better overall, but they struggle with a fundamental problem: when a multi-component workflow fails, which component caused it? Penalizing all components equally kills good skills. Penalizing only the last component misses root causes. Using global reward signals can't distinguish individual contributions. Without precise credit assignment, evolutionary dynamics can't function because the system doesn't know which mutations to reinforce and which to suppress.
 
-**Signed audit trails.** Every execution logged: inputs, outputs, skill versions, resource consumption, coordination decisions. Immutable, cryptographically signed, queryable. For Skills: "Why did the quarterly report use Skill version 2.3 instead of 2.4?" has a definitive answer.
+The legal layer solves this through causal attribution: forensics determines what happened, fault allocation assigns credit, and remediation adjusts incentives. These are core platform operations that make learning possible.
 
-**Liability assignment.** Clear responsibility: skill providers accountable for declared behavior, planner accountable for composition logic, users accountable for task specifications. For Skills: when financial analysis is wrong, audit trail shows whether the error came from bad data extraction (skill provider), invalid skill combination (planner), or ambiguous requirements (user).
+**Forensics establishes causality.** Every execution produces a structured audit trail: input schemas, component versions (cryptographic hashes), plan structure, declared contracts (pre/postconditions, effects), intermediate outputs, and resource consumption. This becomes a queryable execution graph for automated analysis. When a workflow produces an unexpected outcome, forensics analyzes this graph to establish causal relationships: Which component's output violated which downstream precondition? Which plan decision introduced the composition error? Which input distribution fell outside declared envelopes? Forensics itself can be a learned component, a specialized skill trained on thousands of incidents to identify failure patterns, while still operating within contract boundaries declared at composition time.
 
-**Compliance reporting.** Automatic generation of SOC2, GDPR, HIPAA compliance artifacts from audit trails. For Skills: enterprise deployments need "prove you didn't leak PII" and "show me every decision that affected this outcome."
+**Attribution assigns credit signals.** Once causality is established, attribution translates this into feedback for the social layer. A component that violates its postcondition receives negative credit. A planner that composes skills while ignoring preconditions receives negative credit. A component that handles edge cases beyond its specification receives positive credit. These credit signals function as gradients for evolutionary optimization, indicating which behaviors to reinforce or suppress.
 
-Smart contracts demonstrate this pattern at scale. Ethereum secures $30+ billion by combining verified EVM semantics (formal correctness) with staking incentives (economic alignment) and immutable transaction logs (legal accountability). Making attacks cost $20B+ while any benefit is minimal.
+Consider a meeting summary workflow: `transcribe.audio` → `summarize.text` → `extract.actions` → `format.email`. All formal verification passes (types unify, accuracy thresholds met, contracts satisfied). But the outcome is poor: the email says "Sarah will consider the pricing proposal when bandwidth permits." What was actually said: "Sarah will finalize pricing by Friday for the client call."
+
+The cascade: transcribe made a 2% error ("finalize" → "consider"), summarize dropped "by Friday" as contextual detail while keeping fluff, extract over-cautiously softened "will" → "will consider", format added politeness hedging. Each choice defensible within its contract.
+
+Attribution: transcribe receives minor negative credit (error in critical word), summarize receives significant negative credit (dropped deadline), extract and format receive minor negative credit (unnecessary weakening), planner receives negative credit (didn't preserve high-priority information through chain). Each component made a defensible choice, but the cascade turned a firm commitment into a vague maybe. This is optimality failure, not correctness failure.
+
+**This completes the learning loop.** The social layer implements evolutionary dynamics (variation and selection based on reputation), but can only function with accurate credit signals. Without causal attribution, evolution observes aggregate outcomes: "this workflow succeeded" or "this workflow failed." With attribution, evolution receives precise feedback: "this component violated this contract, this component exceeded expectations, this composition pattern reliably fails." The legal layer provides backward-looking credit assignment; the social layer provides forward-looking selection. Together they enable learning.
+
+**Remediation adjusts incentives automatically.** Human legal systems use damages, insurance, and sanctions to rebalance incentives after failure. Platforms can encode equivalent mechanisms: reputation adjustments (decreased selection probability), stake slashing (for marketplace skills with posted bonds), access throttling (reduced API quotas), insurance payouts (immediate victim compensation with asynchronous cost allocation). These operate at system speed: credit updates in seconds, selection shifts on the next plan.
+
+The reward hacking problem poses a particular challenge: static reward functions can't anticipate all gaming strategies. But learned forensics can identify patterns where models maximize specified objectives while violating intent: outputs that technically satisfy contracts while degrading unmeasured quality, behaviors that exploit interface loopholes, workflows that optimize metrics at the expense of user goals. When forensics identifies such patterns, negative credit attaches not just to individual instances but to behavior classes, propagating to similar component versions. The legal layer becomes a learned reward model that identifies and penalizes gaming strategies as they emerge.
+
+This solves credit assignment: multi-agent systems learn from coordination failures in seconds, not months, while leaving high-stakes adjudication to external oversight.
 
 ### Failure Semantics Across All Layers
 
-When something fails, all three layers respond with clear, coordinated semantics:
+The three layers work together, each handling different failure modes. When something fails, coordinated responses ensure the system catches errors, adjusts selection, and improves over time:
 
-| Failure Type | Formal Response | Social Response | Legal Response |
+| Failure Type | Formal Response | Social Response | Legal Response (Credit Assignment) |
 |--------------|----------------|-----------------|----------------|
-| **Type mismatch** | Reject plan statically | No reputation penalty (caught early) | Log in audit trail |
-| **Budget exceeded** | Truncate/fallback/abort | Reputation penalty if habitual | Charge overage to skill provider |
-| **Malformed output** | Abort with structured error | Severe reputation hit | Skill provider liable for damages |
-| **Unauthorized side effect** | Block at capability layer | Immediate de-listing | Breach of contract, legal action |
-| **Composition conflict** | Reject plan with diff | Planner penalty if persistent | Log decision rationale |
+| **Type mismatch** | Reject plan statically | No reputation penalty (caught early) | Neutral credit (prevented by verification) |
+| **Budget exceeded** | Truncate/fallback/abort | Reputation penalty if habitual | Negative credit to component; charge overage |
+| **Malformed output** | Abort with structured error | Severe reputation hit | Negative credit to component; positive credit to detector |
+| **Unauthorized side effect** | Block at capability layer | Immediate de-listing | Severe negative credit; pattern propagation |
+| **Quality degradation** | No formal violation (passes verification) | Gradual reputation decay | Forensics attributes credit across cascade; planner penalized for poor composition |
 
-This demonstrates why you need all three. Formal catches predictable failures. Social handles quality degradation. Legal assigns responsibility for the unpredictable.
+This demonstrates why you need all three. Formal catches predictable failures. Social handles quality degradation. Legal assigns credit to enable learning from failures.
 
 ## The Synthesis
 
-This architecture is achievable now because AI agents differ from humans in one crucial way: we can verify their behavior mechanically. Type systems catch interface mismatches automatically. Runtime monitors detect violations instantly. We can inspect internal states, run systematic A/B tests, and enforce formal specifications at component boundaries. Even reasoning structure can be verified when expressed as typed programs, as noted in the formal layer above. This is mechanical enforcement reaching into cognition itself, where society needed human judgment alone. And we already know how to build institutions: markets, reputation systems, voting mechanisms, legal accountability. We have centuries of theory and decades of digital implementation.
+This architecture is achievable now because AI agents differ from humans in one crucial way: we can verify their behavior mechanically. Type systems catch interface mismatches automatically. Runtime monitors detect violations instantly. We can inspect internal states, run systematic A/B tests, and enforce formal specifications at component boundaries. Even reasoning structure can be verified when expressed as typed programs, as noted in the formal layer above. This is mechanical enforcement reaching into cognition itself, where society needed human judgment alone. And we already know how to build institutions: markets, reputation systems, voting mechanisms, credit assignment. We have centuries of theory and decades of digital implementation.
 
-The synthesis is within reach. [The Model Context Protocol](https://www.anthropic.com/news/model-context-protocol) provides typed schemas. Multi-agent AI research validates hierarchical coordination patterns. [Ethereum](https://ethereum.org/) demonstrates the complete integration: $30+ billion secured through verified EVM semantics (formal), staking incentives (social), and immutable transaction logs (legal) working together.
+The synthesis is within reach. [The Model Context Protocol](https://www.anthropic.com/news/model-context-protocol) provides typed schemas. Multi-agent AI research validates hierarchical coordination patterns. [Ethereum](https://ethereum.org/) demonstrates the complete integration: $30+ billion secured through verified EVM semantics (formal), staking incentives (social), and immutable transaction logs (credit assignment) working together.
 
-Skills as currently shipped validate the demand for composable AI capabilities. But scaling to production requires the substrate described above. Claude coordinates skills through model inference rather than explicit composition. Skills don't declare types or effects in their interfaces, making compositional verification impossible. Claude Code provides execution-level sandboxing (filesystem and network isolation). This is necessary but insufficient. It catches violations at runtime without enabling static composition checks. There's no reputation system tracking which skills actually work. There's no competitive pressure. There are no audit trails for accountability. The system relies primarily on a single LLM making good guesses, with sandboxing as a safety net.
+Skills as currently shipped validate the demand for composable AI capabilities. But scaling to production requires the substrate described above. Claude coordinates Skills through model inference rather than explicit composition. Skills don't declare types or effects in their interfaces, making compositional verification impossible. Claude Code provides execution-level sandboxing (filesystem and network isolation). This is necessary but insufficient. It catches violations at runtime without enabling static composition checks. There's no reputation system tracking which Skills actually work. There's no competitive pressure. There are no audit trails for credit assignment. The system relies primarily on a single LLM making good guesses, with sandboxing as a safety net.
 
 We should not just race to build smarter models. We should also be racing to build the institutional machinery that keeps the systems safe and reliable at scale, because it's economic necessity. The formal verification community has spent decades proving systems correct. The mechanism design community has Nobel Prizes for institutional structures. The ML community is building increasingly capable agents. These communities need to talk. The synthesis is achievable, and the opportunity won't last because the bubble could burst before we get there.
