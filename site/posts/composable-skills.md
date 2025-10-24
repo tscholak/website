@@ -180,7 +180,7 @@ Production evaluation systems like [Mistral's judges](https://mistral.ai/news/ai
 
 Reputation mechanisms tell us which skills work better overall, but they struggle with a fundamental problem: when a multi-component workflow fails, which component caused it? Penalizing all components equally kills good skills. Penalizing only the last component misses root causes. Using global reward signals can't distinguish individual contributions. Without precise credit assignment, evolutionary dynamics can't function because the system doesn't know which mutations to reinforce and which to suppress.
 
-The legal layer solves this through causal attribution: forensics determines what happened, fault allocation assigns credit, and remediation adjusts incentives. These are core platform operations that make learning possible.
+The legal layer solves this through causal attribution: forensics determines what happened, fault allocation assigns credit, and remediation adjusts incentives. These are automated platform operations that enable learning. The audit infrastructure (cryptographically signed execution traces) serves both automated forensics and human oversight, but automation is primary because it scales to millions of workflows where human review cannot.
 
 **Forensics establishes causality.** Every execution produces a structured audit trail: input schemas, component versions (cryptographic hashes), plan structure, declared contracts (pre/postconditions, effects), intermediate outputs, and resource consumption. This becomes a queryable execution graph for automated analysis. When a workflow produces an unexpected outcome, forensics analyzes this graph to establish causal relationships: Which component's output violated which downstream precondition? Which plan decision introduced the composition error? Which input distribution fell outside declared envelopes? Forensics itself can be a learned component, a specialized skill trained on thousands of incidents to identify failure patterns ([production tools](https://blog.langchain.com/insights-agent-multiturn-evals-langsmith/?utm_medium=social&utm_source=linkedin&utm_campaign=q4-2025_october-launch-week_aw) demonstrate the value of clustering failures by behavioral patterns), while still operating within contract boundaries declared at composition time.
 
@@ -236,7 +236,7 @@ The formal verification community has the tools. The mechanism design community 
 
 [^chiusano]: Paul Chiusano, creator of the [Unison programming language](https://www.unison-lang.org/), personal communication, October 2025. Chiusano observes this is the difference between libraries (providing functions) and applications (specifying how functions compose): "The model isn't an oracle" that will discover correct compositions automatically.
 
-[^beaudoin]: Philippe Beaudoin, VP Research at [LawZero](https://www.lawzero.com/), personal communication, October 2025.
+[^beaudoin]: Philippe Beaudoin, Senior Director, Research at [LawZero](https://www.lawzero.org/), personal communication, October 2025.
 
 [^markovian]: Parallel work on reasoning validates this principle. Reddy et al., "The Markovian Thinker," [arXiv:2510.06557](https://arxiv.org/abs/2510.06557), 2024, demonstrate that redesigning the thinking environment enables 96K-token reasoning with linear compute—architecture over capability.
 
