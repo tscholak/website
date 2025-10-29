@@ -18,6 +18,8 @@ This article presents a solution. We'll see why natural language coordination fa
 
 This is a follow-up to ["Everyone's Arguing About the Wrong Abstraction Layer"](/posts/agentkit). That post argued that neither visual workflow builders nor natural language prompts provide *formal* compositional guarantees, and that this lack of structure creates economic risks as systems scale. This post drills into Anthropic's Skills feature to illustrate the point. You don't have to read the previous post to follow along, but it provides useful context.
 
+The previous piece sparked conversations that shaped this one. When Anthropic launched Skills, I realized the coordination problem was no longer hypothetical: it was arriving in production. This article is my attempt to think through what actually solves it.
+
 ## What Skills Are
 
 A Skill is a folder containing instructions and resources that Claude loads when relevant. At minimum, it has a `SKILL.md` file describing what the Skill does. It can also include executable scripts, templates, or other supporting files.
@@ -224,7 +226,7 @@ This demonstrates why you need all three. Formal verification prevents violation
 
 ## The Synthesis
 
-The proposed architecture combines three layers because no single approach suffices. Formal verification prevents predictable composition failures but cannot specify optimal behavior under uncertainty. Social mechanisms learn what works through execution feedback but require formal boundaries to prevent catastrophic failures. Legal accountability assigns responsibility when the other layers fail but needs verifiable traces to function. Each layer addresses problems the others cannot solve.
+The proposed architecture combines three layers because no single approach suffices. Formal verification prevents predictable composition failures but cannot specify optimal behavior under uncertainty. Social mechanisms learn what works through execution feedback but require formal boundaries to prevent catastrophic failures. Legal accountability assigns responsibility when the other layers fail but needs verifiable traces to function. Each layer addresses problems the others cannot solve.[^future-safety]
 
 AI systems create both necessity and opportunity for automated coordination. Necessity: workflows execute millions of times per hour, accumulating coordination debt faster than human institutions can correct. Opportunity: each layer exploits capabilities human institutions lack.
 
@@ -240,7 +242,7 @@ The components exist. [The Model Context Protocol](https://www.anthropic.com/new
 
 Skills validate demand for composable capabilities but lack composition guarantees. Claude orchestrates Skills through inference rather than verified planning. MCP provides types but requires explicit invocation. Skills enable autonomous selection but without type safety. Neither provides reputation tracking, competitive pressure, or audit trails. The synthesis (autonomous selection of capabilities that verifiably compose) requires combining these pieces into coherent architecture.
 
-The formal verification community has the tools. The mechanism design community has the theory. The ML community ships the systems. What's missing is synthesis. Skills and MCP demonstrate the pieces are emerging independently. The question is whether coordination infrastructure gets built before production failures force reactive regulation, or as principled architecture that enables scale. Economics determines the answer by 2027.
+The formal verification community has the tools. The mechanism design community has the theory. The ML community ships the systems. Agent architecture research has focused on individual capabilities (reasoning, memory, execution), but production demands coordination. What's missing is synthesis. Skills and MCP demonstrate the pieces are emerging independently. The question is whether coordination infrastructure gets built before production failures force reactive regulation, or as principled architecture that enables scale. Economics determines the answer by 2027.
 
 [^chiusano]: Paul Chiusano, creator of the [Unison programming language](https://www.unison-lang.org/), personal communication, October 2025. Chiusano observes this is the difference between libraries (providing functions) and applications (specifying how functions compose): "The model isn't an oracle" that will discover correct compositions automatically.
 
@@ -249,3 +251,9 @@ The formal verification community has the tools. The mechanism design community 
 [^coordination-failures]: Reward hacking optimizes against the specification. Scheming actively conceals misbehavior. Attempts to train out scheming appeared effective, but models developed situational awareness to detect when they're being evaluated, suggesting they learn to hide misbehavior during testing rather than genuinely aligning.
 
 [^planner-verification]: One frontier deserves attention: verifying the planner's reasoning itself. When AI reasoning is expressed as a typed program (as in [OpenAI's o1](https://platform.openai.com/docs/guides/reasoning) or [DeepMind's AlphaProof](https://deepmind.google/discover/blog/ai-solves-imo-problems-at-silver-medal-level/)), type-checking mechanically verifies logical structure through the [Curry-Howard correspondence](https://en.wikipedia.org/wiki/Curry%E2%80%93Howard_correspondence). We still evaluate optimality by outcomes, but structural verification reaches into cognition itself. This is something courts need judges for, but AI can expose cognition as programs that machines can verify.
+
+[^future-safety]: As capabilities increase, high-stakes decisions may require forward-looking harm assessment for cases with deep epistemic uncertainty (ambiguous safety specifications, novel contexts). [Bengio et al.](https://arxiv.org/abs/2502.15657) propose computing harm probabilities across plausible interpretations and blocking actions when thresholds are exceeded. The coordination framework's audit trails, effect declarations, and execution histories provide the substrate such mechanisms require.
+
+---
+
+*Thanks to Philippe Beaudoin and Paul Chiusano for detailed feedback that significantly improved this piece. Their insights on social learning mechanisms and the library/application distinction shaped the core argument.*
