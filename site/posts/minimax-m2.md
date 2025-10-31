@@ -1,5 +1,5 @@
 ---
-title: "Did MiniMax Just Kill Efficient Attention? Not Quite"
+title: "Trouble in LA LA Land: Did MiniMax Just Kill Efficient Attention?"
 publication:
   status: published
   date: Oct 30, 2025
@@ -42,7 +42,7 @@ So MiniMax's decision makes sense for single-shot reasoning. They (and everyone 
 
 ## The M2 Problem
 
-No, it doesn't. M2 follows the standard interleaved-thinking pattern: it emits `<think>...</think>` blocks, and these blocks accumulate over multi-turn conversations. Every bit of thinking history needs to be retained, and the [README](https://huggingface.co/MiniMaxAI/MiniMax-M2#inference-parameters) warns that removing them hurts performance. Thus every exchange adds more tokens, building up tens of thousands of reasoning tokens that must stay in memory.
+No, it doesn't. M2 follows the standard [interleaved-thinking pattern](https://huggingface.co/blog/MiniMax-AI/aligning-to-what#the-need-for-interleaved-thinking): it emits `<think>...</think>` blocks, and these blocks accumulate over multi-turn conversations. Every bit of thinking history needs to be retained, and the [README](https://huggingface.co/MiniMaxAI/MiniMax-M2#inference-parameters) warns that removing them hurts performance. Thus every exchange adds more tokens, building up tens of thousands of reasoning tokens that must stay in memory.
 
 Delethink can't help here because it only works for single reasoning chains, where you can truncate and carry forward a small state. But in multi-turn conversations, the thinking tokens from previous turns belong to conversation history. You can't delete all of them without negatively impacting performance.
 
@@ -69,3 +69,19 @@ So, where does that leave us? It's clear that we can't just proclaim that linear
 For single-shot reasoning, FA plus Delethink is pragmatic. Stable infrastructure, and the Markovian behavior is already there in pretrained models. That buys time for the efficient attention ecosystem to mature. At M2's scale, the infrastructure pain and model quality risks of hybrids outweigh the compute savings and speed benefits of efficient attention. FA with Delethink is the right call for the majority of single-shot reasoning workloads right now.
 
 For multi-turn interleaved thinking, hybrids with learned placement will eventually become essential. Context accumulates, Delethink can't reset it, and FA's quadratic cost will dominate. Optimized hybrids will win that regime, and that's where the field is heading. That's where my team is heading. See you in the efficient-attention trenches.
+
+---
+
+**Update Oct 31, 2025:** The day after I posted this, [Kimi.ai released](https://huggingface.co/moonshotai/Kimi-Linear-48B-A3B-Instruct) [Kimi Linear Attention (KLA)](https://github.com/fla-org/flash-linear-attention/tree/main/fla/ops/kda), a new hybrid architecture that validates the core argument here in ways even I didn't expect, at least not so soon.
+
+KLA extends Gated DeltaNet with channel-wise gating (instead of scalar gating) and interleaves this efficient attention with full attention in a 3:1 ratio. That ratio matters: just like Jet Nemotron found that only 2-3 layers out of 36 need FA, Kimi found that roughly 25% FA is enough to maintain quality while cutting KV cache by 75% and delivering 6x decoding throughput at 1M context.
+
+The results are great. On synthetic tasks like MQAR and Stack, KLA significantly outperforms Mamba2 and beats Gated DeltaNet. On real reasoning tasks (AIME 2025, MATH500, LiveCodeBench), it matches or beats both MLA (DeepSeek's compressed full attention) and Gated DeltaNet-H after the same SFT recipe. Pretraining scaling laws show 1.16x better loss at the same compute budget.
+
+Two caveats: First, this is a 3B-activated, 48B-total parameter model. M2 is 230B total, so roughly 5x larger. We still don't know what happens at that scale, but the trend is promising. Second, Kimi uses a fixed 3:1 ratio rather than learned placement, so we don't know if that's optimal or just good enough.
+
+But here's what matters: within days of MiniMax saying "efficient attention has some way to go," another major industrial lab shipped a production-grade hybrid that beats full attention on the metrics that matter.
+
+The confusion MiniMax's post-mortem created also triggered a flurry of activity. Everyone working on efficient attention saw an opening and pushed out their work. [Brumby-14B](https://manifestai.com/articles/release-brumby-14b/) (an attention-free model converted from Qwen), [Higher-order Linear Attention](https://arxiv.org/abs/2507.04239), and several others all dropped within days. The Flash Linear Attention community [merged Kimi's optimized KDA kernel](https://github.com/fla-org/flash-linear-attention/pull/621) within hours. There's now active debate about which approach wins where.
+
+What looked like a setback for efficient attention turned into its Streisand moment. MiniMax forced everyone to clarify their positions, tighten their arguments, and ship their code. The infrastructure is maturing faster than anyone expected. The timeline just got a lot shorter.
