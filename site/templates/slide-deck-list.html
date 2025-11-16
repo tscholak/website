@@ -1,0 +1,13 @@
+{{#articles}}
+<div>
+    <a href="/{{url}}">
+        <h2>{{title}}</h2>
+        {{#publication.date}}
+        <p>{{publication.date}}</p>
+        {{/publication.date}}
+        {{#image}}
+        <p><img src="/images/{{.}}" alt="{{title}}"></p>
+        {{/image}}
+    </a>
+</div>
+{{/articles}}

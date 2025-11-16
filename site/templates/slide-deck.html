@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>{{title}}</title>
+    <link rel="stylesheet" href="/css/fonts.css">
+    <link rel="stylesheet" href="/js/reveal/dist/reset.css">
+    <link rel="stylesheet" href="/js/reveal/dist/reveal.css">
+    <!-- Custom theme matching site aesthetic -->
+    <link rel="stylesheet" href="/css/reveal-custom.css">
+</head>
+<body>
+    <div class="reveal">
+        <div class="slides">
+            <section id="title-slide" data-background-color="#000">
+                {{#image}}<div class="title-slide-image"><img src="/images/{{image}}" alt="{{title}}"></div>{{/image}}
+                <h1>{{title}}</h1>
+                {{#subtitle}}<h2>{{subtitle}}</h2>{{/subtitle}}
+                {{#author}}<p><strong>{{{author}}}</strong></p>{{/author}}
+                {{#institute}}<p><strong>{{institute}}</strong></p>{{/institute}}
+                {{#date}}<p>{{date}}</p>{{/date}}
+            </section>
+            {{{content}}}
+        </div>
+    </div>
+
+    <script src="/js/reveal/dist/reveal.js"></script>
+    <script src="/js/reveal/plugin/notes/notes.js"></script>
+    <script src="/js/reveal/plugin/markdown/markdown.js"></script>
+    <script src="/js/reveal/plugin/highlight/highlight.js"></script>
+    <script>
+        // More info about initialization & config:
+        // - https://revealjs.com/initialization/
+        // - https://revealjs.com/config/
+        Reveal.initialize({
+            hash: true,
+            // Learn about plugins: https://revealjs.com/plugins/
+            plugins: [ RevealMarkdown, RevealHighlight, RevealNotes ]
+        });
+    </script>
+</body>
+</html>

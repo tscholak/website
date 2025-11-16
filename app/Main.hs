@@ -64,7 +64,7 @@ import GHC.Generics (Generic)
 import Network.URI (URI (uriPath), parseURI)
 import qualified Options.Applicative as Options
 import qualified Slick (compileTemplate', convert, substitute)
-import qualified Slick.Pandoc as Slick (defaultHtml5Options, markdownToHTMLWithOpts)
+import qualified Slick.Pandoc as Slick (defaultHtml5Options, loadUsingMeta, markdownToHTMLWithOpts)
 import System.Exit (ExitCode (..))
 import Text.Casing (fromHumps, toQuietSnake)
 import qualified Text.Pandoc as Pandoc
@@ -114,7 +114,9 @@ markdownOptions =
           [ Pandoc.extensionsFromList
               [ Pandoc.Ext_yaml_metadata_block,
                 Pandoc.Ext_fenced_code_attributes,
-                Pandoc.Ext_auto_identifiers
+                Pandoc.Ext_auto_identifiers,
+                Pandoc.Ext_fenced_divs,
+                Pandoc.Ext_link_attributes
               ],
             Pandoc.githubMarkdownExtensions
           ]
@@ -140,6 +142,20 @@ codeOptions =
 -- | convert literal Haskell code to html
 codeToHTML :: T.Text -> Action A.Value
 codeToHTML = Slick.markdownToHTMLWithOpts codeOptions Slick.defaultHtml5Options
+
+-- | Reveal.js writer options
+revealWriterOptions :: Pandoc.WriterOptions
+revealWriterOptions = Pandoc.def
+  { Pandoc.writerSlideLevel = Just 2
+  , Pandoc.writerSectionDivs = True
+  }
+
+-- | convert markdown to reveal.js HTML
+markdownToRevealHTML :: T.Text -> Action A.Value
+markdownToRevealHTML = Slick.loadUsingMeta
+  (Pandoc.readMarkdown markdownOptions)
+  (Pandoc.writeRevealJs revealWriterOptions)
+  (Pandoc.writeHtml5String Slick.defaultHtml5Options)
 
 -- | compile and run code (if it has a main function)
 compileAndRunCode :: FilePath -> Action ()
@@ -346,7 +362,7 @@ newtype TagName = TagName String
   deriving newtype (A.ToJSON, A.FromJSON, Binary)
 
 -- | data type for article kinds
-data ArticleKind = BlogPostKind | PublicationKind
+data ArticleKind = BlogPostKind | PublicationKind | SlideDeckKind
   deriving stock (Eq, Ord, Show, Generic)
 
 -- | data type for publish status kinds
@@ -428,6 +444,8 @@ articleToUTC post@BlogPost{bpPublication = PubDate date} =
   post{bpPublication = PubDate (toUTC date)}
 articleToUTC pub@Publication{pubPublication = PubDate date} =
   pub{pubPublication = PubDate (toUTC date)}
+articleToUTC slideDeck@SlideDeck{sdPublication = PubDate date} =
+  slideDeck{sdPublication = PubDate (toUTC date)}
 
 -- | Convert a published article to UTC format (for feeds)
 somePublishedArticleToUTC :: SomePublishedArticle -> SomePublishedArticle
@@ -562,6 +580,22 @@ data Article (kind :: ArticleKind) (status :: PublishStatusKind) where
       pubNext :: Maybe (Article 'PublicationKind status)
     } ->
     Article 'PublicationKind status
+  SlideDeck ::
+    { sdTitle :: String,
+      sdSubtitle :: Maybe String,
+      sdAuthor :: Maybe String,
+      sdInstitute :: Maybe String,
+      sdDate :: Maybe String,
+      sdContent :: String,
+      sdUrl :: String,
+      sdPublication :: PublicationField status,
+      sdGitHash :: String,
+      sdImage :: Maybe String,
+      sdLicense :: Maybe LicenseInfo,
+      sdPrev :: Maybe (Article 'SlideDeckKind status),
+      sdNext :: Maybe (Article 'SlideDeckKind status)
+    } ->
+    Article 'SlideDeckKind status
 
 deriving stock instance (Eq (PublicationField status)) => Eq (Article kind status)
 
@@ -645,6 +679,39 @@ instance (Binary (PublicationField status), Binary (Maybe (Article 'PublicationK
       <*> get
       <*> get
 
+instance (Binary (PublicationField status), Binary (Maybe (Article 'SlideDeckKind status))) => Binary (Article 'SlideDeckKind status) where
+  put :: Article 'SlideDeckKind status -> Put.Put
+  put SlideDeck {..} = do
+    put sdTitle
+    put sdSubtitle
+    put sdAuthor
+    put sdInstitute
+    put sdDate
+    put sdContent
+    put sdUrl
+    put sdPublication
+    put sdGitHash
+    put sdImage
+    put sdLicense
+    put sdPrev
+    put sdNext
+  get :: Get.Get (Article 'SlideDeckKind status)
+  get =
+    SlideDeck
+      <$> get
+      <*> get
+      <*> get
+      <*> get
+      <*> get
+      <*> get
+      <*> get
+      <*> get
+      <*> get
+      <*> get
+      <*> get
+      <*> get
+      <*> get
+
 instance (A.ToJSON (PublicationField status), A.ToJSON (Maybe (Article 'BlogPostKind status))) => A.ToJSON (Article 'BlogPostKind status) where
   toJSON :: Article 'BlogPostKind status -> Yaml.Value
   toJSON BlogPost {..} =
@@ -686,6 +753,25 @@ instance (A.ToJSON (PublicationField status), A.ToJSON (Maybe (Article 'Publicat
         "license" A..= pubLicense,
         "prev" A..= pubPrev,
         "next" A..= pubNext
+      ]
+
+instance (A.ToJSON (PublicationField status), A.ToJSON (Maybe (Article 'SlideDeckKind status))) => A.ToJSON (Article 'SlideDeckKind status) where
+  toJSON :: Article 'SlideDeckKind status -> Yaml.Value
+  toJSON SlideDeck {..} =
+    A.object
+      [ "title" A..= sdTitle,
+        "subtitle" A..= sdSubtitle,
+        "author" A..= sdAuthor,
+        "institute" A..= sdInstitute,
+        "date" A..= sdDate,
+        "content" A..= sdContent,
+        "url" A..= sdUrl,
+        "publication" A..= sdPublication,
+        "gitHash" A..= sdGitHash,
+        "image" A..= sdImage,
+        "license" A..= sdLicense,
+        "prev" A..= sdPrev,
+        "next" A..= sdNext
       ]
 
 instance (A.FromJSON (PublicationField status), A.FromJSON (Maybe (Article 'BlogPostKind status))) => A.FromJSON (Article 'BlogPostKind status) where
@@ -731,6 +817,25 @@ instance (A.FromJSON (PublicationField status), A.FromJSON (Maybe (Article 'Publ
         <*> o A..:? "prev"
         <*> o A..:? "next"
 
+instance (A.FromJSON (PublicationField status), A.FromJSON (Maybe (Article 'SlideDeckKind status))) => A.FromJSON (Article 'SlideDeckKind status) where
+  parseJSON :: Yaml.Value -> Yaml.Parser (Article 'SlideDeckKind status)
+  parseJSON =
+    A.withObject "SlideDeck" $ \o ->
+      SlideDeck
+        <$> o A..: "title"
+        <*> o A..:? "subtitle"
+        <*> o A..:? "author"
+        <*> o A..:? "institute"
+        <*> o A..:? "date"
+        <*> o A..: "content"
+        <*> o A..: "url"
+        <*> o A..: "publication"
+        <*> o A..: "gitHash"
+        <*> o A..:? "image"
+        <*> o A..:? "license"
+        <*> o A..:? "prev"
+        <*> o A..:? "next"
+
 -- | assign next and previous articles based on the given order
 assignAdjacentPublishedArticles :: forall kind. [Article kind 'PublishedKind] -> [Article kind 'PublishedKind]
 assignAdjacentPublishedArticles posts =
@@ -738,6 +843,7 @@ assignAdjacentPublishedArticles posts =
         next = posts ^? ix (i - 1)
         go Publication {} = cur {pubPrev = prev, pubNext = next}
         go BlogPost {} = cur {bpPrev = prev, bpNext = next}
+        go SlideDeck {} = cur {sdPrev = prev, sdNext = next}
      in go cur
   | (cur, i) <- zip posts [0 :: Int ..]
   ]
@@ -751,6 +857,7 @@ instance Show (SomeStatusArticle kind) where
   show (SomeStatusArticle article) = case article of
     BlogPost {bpTitle, bpUrl} -> "SomeStatusArticle (BlogPost {bpTitle = " ++ show bpTitle ++ ", bpUrl = " ++ show bpUrl ++ ", ...})"
     Publication {pubTitle, pubUrl} -> "SomeStatusArticle (Publication {pubTitle = " ++ show pubTitle ++ ", pubUrl = " ++ show pubUrl ++ ", ...})"
+    SlideDeck {sdTitle, sdUrl} -> "SomeStatusArticle (SlideDeck {sdTitle = " ++ show sdTitle ++ ", sdUrl = " ++ show sdUrl ++ ", ...})"
 
 instance Binary (SomeStatusArticle 'BlogPostKind) where
   put :: SomeStatusArticle 'BlogPostKind -> Put.Put
@@ -784,6 +891,23 @@ instance Binary (SomeStatusArticle 'PublicationKind) where
     case tag of
       0 -> SomeStatusArticle <$> (get :: Get.Get (Article 'PublicationKind 'DraftKind))
       1 -> SomeStatusArticle <$> (get :: Get.Get (Article 'PublicationKind 'PublishedKind))
+      _ -> fail $ "Unknown status tag: " ++ show tag
+
+instance Binary (SomeStatusArticle 'SlideDeckKind) where
+  put :: SomeStatusArticle 'SlideDeckKind -> Put.Put
+  put (SomeStatusArticle article) = case article of
+    SlideDeck{sdPublication = PubDate _} -> do
+      Put.putWord8 1  -- Tag for published
+      put article
+    SlideDeck{sdPublication = PubDraft} -> do
+      Put.putWord8 0  -- Tag for draft
+      put article
+  get :: Get.Get (SomeStatusArticle 'SlideDeckKind)
+  get = do
+    tag <- Get.getWord8
+    case tag of
+      0 -> SomeStatusArticle <$> (get :: Get.Get (Article 'SlideDeckKind 'DraftKind))
+      1 -> SomeStatusArticle <$> (get :: Get.Get (Article 'SlideDeckKind 'PublishedKind))
       _ -> fail $ "Unknown status tag: " ++ show tag
 
 instance A.FromJSON (SomeStatusArticle 'BlogPostKind) where
@@ -820,6 +944,23 @@ instance A.FromJSON (SomeStatusArticle 'PublicationKind) where
           _ -> fail $ "Unknown publication status: " ++ status
       _ -> fail "Expected publication to be an object") v
 
+instance A.FromJSON (SomeStatusArticle 'SlideDeckKind) where
+  parseJSON :: Yaml.Value -> Yaml.Parser (SomeStatusArticle 'SlideDeckKind)
+  parseJSON v = A.withObject "SlideDeck" (\o -> do
+    pub <- o A..: "publication"
+    case pub of
+      A.Object pubObj -> do
+        status :: String <- pubObj A..: "status"
+        case status of
+          "published" -> do
+            article <- A.parseJSON @(Article 'SlideDeckKind 'PublishedKind) v
+            return (SomeStatusArticle article)
+          "draft" -> do
+            article <- A.parseJSON @(Article 'SlideDeckKind 'DraftKind) v
+            return (SomeStatusArticle article)
+          _ -> fail $ "Unknown publication status: " ++ status
+      _ -> fail "Expected publication to be an object") v
+
 extractPublished ::
   SomeStatusArticle kind ->
   Maybe (Article kind 'PublishedKind, UTCTime)
@@ -829,6 +970,8 @@ extractPublished (SomeStatusArticle a) =
     BlogPost {bpPublication = PubDraft} -> Nothing
     a'@Publication {pubPublication = PubDate date} -> Just (a', dateToUTC date)
     Publication {pubPublication = PubDraft} -> Nothing
+    a'@SlideDeck {sdPublication = PubDate date} -> Just (a', dateToUTC date)
+    SlideDeck {sdPublication = PubDraft} -> Nothing
 
 -- | type-erased article with both kind and status hidden
 -- Note: This only wraps published articles to ensure type safety
@@ -843,14 +986,20 @@ instance Eq SomePublishedArticle where
   (==) :: SomePublishedArticle -> SomePublishedArticle -> Bool
   (SomePublishedArticle a@BlogPost {}) == (SomePublishedArticle b@BlogPost {}) = a == b
   (SomePublishedArticle a@Publication {}) == (SomePublishedArticle b@Publication {}) = a == b
+  (SomePublishedArticle a@SlideDeck {}) == (SomePublishedArticle b@SlideDeck {}) = a == b
   _ == _ = False
 
 instance Ord SomePublishedArticle where
   compare :: SomePublishedArticle -> SomePublishedArticle -> Ordering
   compare (SomePublishedArticle a@BlogPost {}) (SomePublishedArticle b@BlogPost {}) = compare a b
   compare (SomePublishedArticle BlogPost {}) (SomePublishedArticle Publication {}) = LT
+  compare (SomePublishedArticle BlogPost {}) (SomePublishedArticle SlideDeck {}) = LT
   compare (SomePublishedArticle Publication {}) (SomePublishedArticle BlogPost {}) = GT
   compare (SomePublishedArticle a@Publication {}) (SomePublishedArticle b@Publication {}) = compare a b
+  compare (SomePublishedArticle Publication {}) (SomePublishedArticle SlideDeck {}) = LT
+  compare (SomePublishedArticle SlideDeck {}) (SomePublishedArticle BlogPost {}) = GT
+  compare (SomePublishedArticle SlideDeck {}) (SomePublishedArticle Publication {}) = GT
+  compare (SomePublishedArticle a@SlideDeck {}) (SomePublishedArticle b@SlideDeck {}) = compare a b
 
 instance A.FromJSON SomePublishedArticle where
   parseJSON :: Yaml.Value -> Yaml.Parser SomePublishedArticle
@@ -860,13 +1009,15 @@ instance A.FromJSON SomePublishedArticle where
       case kind of
         "blog post" -> SomePublishedArticle <$> (A..:) @(Article 'BlogPostKind 'PublishedKind) o "article"
         "publication" -> SomePublishedArticle <$> (A..:) @(Article 'PublicationKind 'PublishedKind) o "article"
-        _ -> fail "Expected blog post or publication"
+        "slide deck" -> SomePublishedArticle <$> (A..:) @(Article 'SlideDeckKind 'PublishedKind) o "article"
+        _ -> fail "Expected blog post, publication, or slide deck"
 
 instance A.ToJSON SomePublishedArticle where
   toJSON :: SomePublishedArticle -> Yaml.Value
   toJSON (SomePublishedArticle article) = case article of
     BlogPost {} -> A.object ["kind" A..= ("blog post" :: String), "article" A..= article]
     Publication {} -> A.object ["kind" A..= ("publication" :: String), "article" A..= article]
+    SlideDeck {} -> A.object ["kind" A..= ("slide deck" :: String), "article" A..= article]
 
 -- | helper data type for lists of articles of a given kind
 newtype ArticlesInfo kind status = ArticlesInfo
@@ -1066,6 +1217,48 @@ writePublication config (SomeStatusArticle publication@Publication {..}) = do
     . A.toJSON
     $ publication
 
+-- | find and build all slide decks
+buildSlideDeckList :: Config Identity -> Action [Article 'SlideDeckKind 'PublishedKind]
+buildSlideDeckList config = do
+  slideDeckPaths <- getDirectoryFiles "." ["site/slide-decks//*.md"]
+  slideDecks <- forP slideDeckPaths (buildSlideDeck config)
+  let published = mapMaybe extractPublished slideDecks
+      slideDecks' = assignAdjacentPublishedArticles . map fst . sortOn (Down . snd) $ published
+  _ <- forP slideDecks (writeSlideDeck config) -- Write ALL slide decks, including drafts
+  return slideDecks' -- But only return published ones for lists
+
+-- | build slide decks page
+buildSlideDecks :: Config Identity -> [Article 'SlideDeckKind 'PublishedKind] -> Action ()
+buildSlideDecks config articles = do
+  slideDecksTemplate <- Slick.compileTemplate' "site/templates/slide-decks.html"
+  let slideDecksInfo = ArticlesInfo {articles}
+      slideDecksHTML = T.unpack $ Slick.substitute slideDecksTemplate (withSiteMeta config $ A.toJSON slideDecksInfo)
+  writeFile' (runIdentity (outputFolder config) </> "slide-decks.html") slideDecksHTML
+
+-- | build a single slide deck
+buildSlideDeck :: Config Identity -> FilePath -> Action (SomeStatusArticle 'SlideDeckKind)
+buildSlideDeck config slideDeckSrcPath = cacheAction ("build" :: T.Text, slideDeckSrcPath) $ do
+  slideDeckContent <- readFile' slideDeckSrcPath
+  slideDeckData <- markdownToRevealHTML . T.pack $ slideDeckContent
+  gitHash <- getGitHash slideDeckSrcPath >>= prettyGitHash config
+  let slideDeckUrl = T.pack . dropDirectory1 $ slideDeckSrcPath -<.> "html"
+      withSlideDeckUrl = A._Object . at "url" ?~ A.String slideDeckUrl
+      withGitHash = A._Object . at "gitHash" ?~ A.String (T.pack gitHash)
+      withLicense = A._Object . at "license" ?~ A.toJSON (extractOrDefaultLicense slideDeckSrcPath slideDeckData)
+      fullSlideDeckData = withSlideDeckUrl . withGitHash . withLicense $ slideDeckData
+  Slick.convert fullSlideDeckData
+
+-- | write slide deck to file
+writeSlideDeck :: Config Identity -> SomeStatusArticle 'SlideDeckKind -> Action ()
+writeSlideDeck config (SomeStatusArticle slideDeck@SlideDeck {..}) = do
+  slideDeckTemplate <- Slick.compileTemplate' "site/templates/slide-deck.html"
+  writeFile' (runIdentity (outputFolder config) </> sdUrl)
+    . T.unpack
+    . Slick.substitute slideDeckTemplate
+    . withSiteMeta config
+    . A.toJSON
+    $ slideDeck
+
 -- | find all tags and build tag pages
 buildTagList :: Config Identity -> [SomePublishedArticle] -> Action [Tag]
 buildTagList config articles =
@@ -1075,6 +1268,7 @@ buildTagList config articles =
     collectTags :: forall kind. Article kind 'PublishedKind -> Map TagName [SomePublishedArticle]
     collectTags post@BlogPost {bpTagNames} = Map.fromList $ (,pure $ SomePublishedArticle post) <$> itemsToList bpTagNames
     collectTags publication@Publication {pubTagNames} = Map.fromList $ (,pure $ SomePublishedArticle publication) <$> itemsToList pubTagNames
+    collectTags SlideDeck {} = Map.empty  -- Slide decks don't have tags
     mkTag (tagName@(TagName name), articles') =
       Tag
         { name = tagName,
@@ -1084,6 +1278,7 @@ buildTagList config articles =
     comp :: forall kind. Article kind 'PublishedKind -> Down UTCTime
     comp Publication {pubPublication = PubDate date} = Down (dateToUTC date)
     comp BlogPost {bpPublication = PubDate date} = Down (dateToUTC date)
+    comp SlideDeck {sdPublication = PubDate date} = Down (dateToUTC date)
 
 -- | build tags page
 buildTags :: Config Identity -> [Tag] -> Action ()
@@ -1186,7 +1381,9 @@ buildRules config = do
   buildBlogPosts config posts
   publications <- buildPublicationList config
   buildPublications config publications
-  let articles = (SomePublishedArticle <$> posts) <> (SomePublishedArticle <$> publications)
+  slideDecks <- buildSlideDeckList config
+  buildSlideDecks config slideDecks
+  let articles = (SomePublishedArticle <$> posts) <> (SomePublishedArticle <$> publications) <> (SomePublishedArticle <$> slideDecks)
   tags <- buildTagList config articles
   buildTags config tags
   buildContact config
