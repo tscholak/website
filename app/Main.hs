@@ -31,7 +31,7 @@ import Control.Lens (at, ix, (?~), (^?))
 import Control.Monad (void)
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import Data.Aeson (toJSON)
-import qualified Data.Aeson as A (Encoding, FromArgs, FromJSON (parseJSON), KeyValue ((.=)), Options (..), Result (Error, Success), SumEncoding (..), ToJSON (toJSON), Value (..), defaultOptions, fromJSON, genericParseJSON, genericToEncoding, genericToJSON, object, withObject, withText, (.:), (.:?))
+import qualified Data.Aeson as A (Encoding, FromJSON (parseJSON), KeyValue ((.=)), Options (..), Result (Error, Success), ToJSON (toJSON), Value (..), defaultOptions, fromJSON, genericParseJSON, genericToEncoding, genericToJSON, object, withObject, withText, (.:), (.:?))
 import qualified Data.Aeson.KeyMap as KM (insert, lookup, union)
 import qualified Data.Aeson.Lens as A (AsValue (_Object, _String), key, pattern Integer)
 import qualified Data.Aeson.Parser.Internal as A (jsonEOF')
@@ -39,7 +39,6 @@ import qualified Data.Attoparsec.ByteString as Atto
 import qualified Data.Binary.Get as Get
 import qualified Data.Binary.Put as Put
 import qualified Data.ByteString as BS
-import qualified Data.Char
 import Data.Either.Validation (Validation)
 import qualified Data.Either.Validation as Validation
 import Data.Functor.Compose (Compose (Compose))
@@ -56,7 +55,7 @@ import qualified Data.Text as T
 import Data.Time (UTCTime, defaultTimeLocale, getCurrentTime, parseTimeM, parseTimeOrError)
 import Data.Time.Format.ISO8601 (iso8601Show)
 import qualified Data.Yaml as Yaml
-import Development.Shake (Action, Exit (..), ShakeOptions (..), Stderr (..), Stdout (..), cmd, copyFileChanged, forP, getDirectoryFiles, putNormal, readFile', shakeOptions, writeFile', pattern Chatty)
+import Development.Shake (Action, CmdOption (..), Exit (..), ShakeOptions (..), Stderr (..), Stdout (..), cmd, copyFileChanged, forP, getDirectoryFiles, putNormal, readFile', shakeOptions, writeFile', pattern Chatty)
 import Development.Shake.Classes (Binary (..))
 import Development.Shake.FilePath (dropDirectory1, takeExtension, (-<.>), (</>))
 import Development.Shake.Forward (cacheAction, shakeForward)
@@ -145,17 +144,19 @@ codeToHTML = Slick.markdownToHTMLWithOpts codeOptions Slick.defaultHtml5Options
 
 -- | Reveal.js writer options
 revealWriterOptions :: Pandoc.WriterOptions
-revealWriterOptions = Pandoc.def
-  { Pandoc.writerSlideLevel = Just 2
-  , Pandoc.writerSectionDivs = True
-  }
+revealWriterOptions =
+  Pandoc.def
+    { Pandoc.writerSlideLevel = Just 2,
+      Pandoc.writerSectionDivs = True
+    }
 
 -- | convert markdown to reveal.js HTML
 markdownToRevealHTML :: T.Text -> Action A.Value
-markdownToRevealHTML = Slick.loadUsingMeta
-  (Pandoc.readMarkdown markdownOptions)
-  (Pandoc.writeRevealJs revealWriterOptions)
-  (Pandoc.writeHtml5String Slick.defaultHtml5Options)
+markdownToRevealHTML =
+  Slick.loadUsingMeta
+    (Pandoc.readMarkdown markdownOptions)
+    (Pandoc.writeRevealJs revealWriterOptions)
+    (Pandoc.writeHtml5String Slick.defaultHtml5Options)
 
 -- | compile and run code (if it has a main function)
 compileAndRunCode :: FilePath -> Action ()
@@ -166,11 +167,11 @@ compileAndRunCode srcPath = do
             "exec",
             "--",
             "runhaskell",
-            "-ilib", -- lib directory to import path
-            "-isite/posts", -- posts directory for inter-module dependencies
-            srcPath
+            "-i../lib",        -- lib directory (relative to build/)
+            "-i../site/posts", -- posts directory for inter-module dependencies
+            ".." </> srcPath   -- source file (relative to build/)
           ]
-  (Exit code, Stdout (_out :: String), Stderr (err :: String)) <- cmd cmdLine
+  (Exit code, Stdout (_out :: String), Stderr (err :: String)) <- cmd (Cwd "build") cmdLine
   case code of
     ExitSuccess -> pure ()
     ExitFailure _ ->
@@ -414,8 +415,8 @@ instance A.ToJSON (PublicationField s) where
 
 -- | Date type that can be in human-readable format or UTC
 data Date
-  = HumanFormat String  -- "Oct 15, 2025"
-  | UTC UTCTime         -- parsed timestamp for ISO8601 output
+  = HumanFormat String -- "Oct 15, 2025"
+  | UTC UTCTime -- parsed timestamp for ISO8601 output
   deriving stock (Show, Generic)
 
 -- | Equality based on the underlying time
@@ -440,12 +441,12 @@ toUTC u@(UTC _) = u
 
 -- | Convert an article's publication date to UTC format (for feeds)
 articleToUTC :: Article kind 'PublishedKind -> Article kind 'PublishedKind
-articleToUTC post@BlogPost{bpPublication = PubDate date} =
-  post{bpPublication = PubDate (toUTC date)}
-articleToUTC pub@Publication{pubPublication = PubDate date} =
-  pub{pubPublication = PubDate (toUTC date)}
-articleToUTC slideDeck@SlideDeck{sdPublication = PubDate date} =
-  slideDeck{sdPublication = PubDate (toUTC date)}
+articleToUTC post@BlogPost {bpPublication = PubDate date} =
+  post {bpPublication = PubDate (toUTC date)}
+articleToUTC pub@Publication {pubPublication = PubDate date} =
+  pub {pubPublication = PubDate (toUTC date)}
+articleToUTC slideDeck@SlideDeck {sdPublication = PubDate date} =
+  slideDeck {sdPublication = PubDate (toUTC date)}
 
 -- | Convert a published article to UTC format (for feeds)
 somePublishedArticleToUTC :: SomePublishedArticle -> SomePublishedArticle
@@ -862,11 +863,11 @@ instance Show (SomeStatusArticle kind) where
 instance Binary (SomeStatusArticle 'BlogPostKind) where
   put :: SomeStatusArticle 'BlogPostKind -> Put.Put
   put (SomeStatusArticle article) = case article of
-    BlogPost{bpPublication = PubDate _} -> do
-      Put.putWord8 1  -- Tag for published
+    BlogPost {bpPublication = PubDate _} -> do
+      Put.putWord8 1 -- Tag for published
       put article
-    BlogPost{bpPublication = PubDraft} -> do
-      Put.putWord8 0  -- Tag for draft
+    BlogPost {bpPublication = PubDraft} -> do
+      Put.putWord8 0 -- Tag for draft
       put article
   get :: Get.Get (SomeStatusArticle 'BlogPostKind)
   get = do
@@ -879,11 +880,11 @@ instance Binary (SomeStatusArticle 'BlogPostKind) where
 instance Binary (SomeStatusArticle 'PublicationKind) where
   put :: SomeStatusArticle 'PublicationKind -> Put.Put
   put (SomeStatusArticle article) = case article of
-    Publication{pubPublication = PubDate _} -> do
-      Put.putWord8 1  -- Tag for published
+    Publication {pubPublication = PubDate _} -> do
+      Put.putWord8 1 -- Tag for published
       put article
-    Publication{pubPublication = PubDraft} -> do
-      Put.putWord8 0  -- Tag for draft
+    Publication {pubPublication = PubDraft} -> do
+      Put.putWord8 0 -- Tag for draft
       put article
   get :: Get.Get (SomeStatusArticle 'PublicationKind)
   get = do
@@ -896,11 +897,11 @@ instance Binary (SomeStatusArticle 'PublicationKind) where
 instance Binary (SomeStatusArticle 'SlideDeckKind) where
   put :: SomeStatusArticle 'SlideDeckKind -> Put.Put
   put (SomeStatusArticle article) = case article of
-    SlideDeck{sdPublication = PubDate _} -> do
-      Put.putWord8 1  -- Tag for published
+    SlideDeck {sdPublication = PubDate _} -> do
+      Put.putWord8 1 -- Tag for published
       put article
-    SlideDeck{sdPublication = PubDraft} -> do
-      Put.putWord8 0  -- Tag for draft
+    SlideDeck {sdPublication = PubDraft} -> do
+      Put.putWord8 0 -- Tag for draft
       put article
   get :: Get.Get (SomeStatusArticle 'SlideDeckKind)
   get = do
@@ -912,54 +913,69 @@ instance Binary (SomeStatusArticle 'SlideDeckKind) where
 
 instance A.FromJSON (SomeStatusArticle 'BlogPostKind) where
   parseJSON :: Yaml.Value -> Yaml.Parser (SomeStatusArticle 'BlogPostKind)
-  parseJSON v = A.withObject "Blog post" (\o -> do
-    pub <- o A..: "publication"
-    case pub of
-      A.Object pubObj -> do
-        status :: String <- pubObj A..: "status"
-        case status of
-          "published" -> do
-            article <- A.parseJSON @(Article 'BlogPostKind 'PublishedKind) v
-            return (SomeStatusArticle article)
-          "draft" -> do
-            article <- A.parseJSON @(Article 'BlogPostKind 'DraftKind) v
-            return (SomeStatusArticle article)
-          _ -> fail $ "Unknown publication status: " ++ status
-      _ -> fail "Expected publication to be an object") v
+  parseJSON v =
+    A.withObject
+      "Blog post"
+      ( \o -> do
+          pub <- o A..: "publication"
+          case pub of
+            A.Object pubObj -> do
+              status :: String <- pubObj A..: "status"
+              case status of
+                "published" -> do
+                  article <- A.parseJSON @(Article 'BlogPostKind 'PublishedKind) v
+                  return (SomeStatusArticle article)
+                "draft" -> do
+                  article <- A.parseJSON @(Article 'BlogPostKind 'DraftKind) v
+                  return (SomeStatusArticle article)
+                _ -> fail $ "Unknown publication status: " ++ status
+            _ -> fail "Expected publication to be an object"
+      )
+      v
 
 instance A.FromJSON (SomeStatusArticle 'PublicationKind) where
   parseJSON :: Yaml.Value -> Yaml.Parser (SomeStatusArticle 'PublicationKind)
-  parseJSON v = A.withObject "Publication" (\o -> do
-    pub <- o A..: "publication"
-    case pub of
-      A.Object pubObj -> do
-        status :: String <- pubObj A..: "status"
-        case status of
-          "published" -> do
-            article <- A.parseJSON @(Article 'PublicationKind 'PublishedKind) v
-            return (SomeStatusArticle article)
-          "draft" -> do
-            article <- A.parseJSON @(Article 'PublicationKind 'DraftKind) v
-            return (SomeStatusArticle article)
-          _ -> fail $ "Unknown publication status: " ++ status
-      _ -> fail "Expected publication to be an object") v
+  parseJSON v =
+    A.withObject
+      "Publication"
+      ( \o -> do
+          pub <- o A..: "publication"
+          case pub of
+            A.Object pubObj -> do
+              status :: String <- pubObj A..: "status"
+              case status of
+                "published" -> do
+                  article <- A.parseJSON @(Article 'PublicationKind 'PublishedKind) v
+                  return (SomeStatusArticle article)
+                "draft" -> do
+                  article <- A.parseJSON @(Article 'PublicationKind 'DraftKind) v
+                  return (SomeStatusArticle article)
+                _ -> fail $ "Unknown publication status: " ++ status
+            _ -> fail "Expected publication to be an object"
+      )
+      v
 
 instance A.FromJSON (SomeStatusArticle 'SlideDeckKind) where
   parseJSON :: Yaml.Value -> Yaml.Parser (SomeStatusArticle 'SlideDeckKind)
-  parseJSON v = A.withObject "SlideDeck" (\o -> do
-    pub <- o A..: "publication"
-    case pub of
-      A.Object pubObj -> do
-        status :: String <- pubObj A..: "status"
-        case status of
-          "published" -> do
-            article <- A.parseJSON @(Article 'SlideDeckKind 'PublishedKind) v
-            return (SomeStatusArticle article)
-          "draft" -> do
-            article <- A.parseJSON @(Article 'SlideDeckKind 'DraftKind) v
-            return (SomeStatusArticle article)
-          _ -> fail $ "Unknown publication status: " ++ status
-      _ -> fail "Expected publication to be an object") v
+  parseJSON v =
+    A.withObject
+      "SlideDeck"
+      ( \o -> do
+          pub <- o A..: "publication"
+          case pub of
+            A.Object pubObj -> do
+              status :: String <- pubObj A..: "status"
+              case status of
+                "published" -> do
+                  article <- A.parseJSON @(Article 'SlideDeckKind 'PublishedKind) v
+                  return (SomeStatusArticle article)
+                "draft" -> do
+                  article <- A.parseJSON @(Article 'SlideDeckKind 'DraftKind) v
+                  return (SomeStatusArticle article)
+                _ -> fail $ "Unknown publication status: " ++ status
+            _ -> fail "Expected publication to be an object"
+      )
+      v
 
 extractPublished ::
   SomeStatusArticle kind ->
@@ -1268,7 +1284,7 @@ buildTagList config articles =
     collectTags :: forall kind. Article kind 'PublishedKind -> Map TagName [SomePublishedArticle]
     collectTags post@BlogPost {bpTagNames} = Map.fromList $ (,pure $ SomePublishedArticle post) <$> itemsToList bpTagNames
     collectTags publication@Publication {pubTagNames} = Map.fromList $ (,pure $ SomePublishedArticle publication) <$> itemsToList pubTagNames
-    collectTags SlideDeck {} = Map.empty  -- Slide decks don't have tags
+    collectTags SlideDeck {} = Map.empty -- Slide decks don't have tags
     mkTag (tagName@(TagName name), articles') =
       Tag
         { name = tagName,
@@ -1366,7 +1382,7 @@ buildFeed config articles = do
           { title = runIdentity . siteTitle . siteMeta $ config,
             domain = show . runIdentity . siteBaseUrl . siteMeta $ config,
             author = runIdentity . siteAuthor . siteMeta $ config,
-            articles = somePublishedArticleToUTC <$> articles,  -- Convert dates to UTC for Atom feed
+            articles = somePublishedArticleToUTC <$> articles, -- Convert dates to UTC for Atom feed
             currentTime = toIsoDate now,
             atomUrl = "/feed.xml"
           }
