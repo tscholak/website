@@ -85,6 +85,8 @@ We use a few language extensions and imports:
   import qualified Data.Text.Lazy.Builder as B
   import           Data.Text.Lazy.Builder (Builder)
   import           Numeric                (showFFloat)
+  import           System.Directory       (createDirectoryIfMissing)
+  import           System.FilePath        (takeDirectory)
 \end{code}
 
 Configuration and data types:
@@ -402,7 +404,8 @@ Writing the SVG to a file:
     <> "\n"
 
   writeSVG :: FilePath -> IO ()
-  writeSVG path =
+  writeSVG path = do
+    createDirectoryIfMissing True (takeDirectory path)
     TL.writeFile path (B.toLazyText documentBuilder)
 
   main :: IO ()
