@@ -70,6 +70,14 @@ in
     languageServer = lib.mkIf (config.devenv.isTesting) null;
   };
   languages.nix.enable = true;
+  languages.python = {
+    enable = true;
+    version = "3.13";
+    venv.enable = true;
+    venv.requirements = ''
+      rendercv[full]
+    '';
+  };
 
   processes =
     { }
@@ -102,6 +110,19 @@ in
       exec = ''
         echo "Running tests...";
         stack test --fast
+      '';
+    };
+    "build-resume-pdf" = {
+      description = "Build resume PDF with rendercv";
+      exec = ''
+        EMAIL=`ghc -e "email" site/Contact.lhs 2>/dev/null | tr -d '"'`
+        TMPDIR=`mktemp -d`
+        TMPFILE="$TMPDIR/resume.yaml"
+        sed "s/^  name: .*/&\n  email: \"$EMAIL\"/" site/resume.yaml > "$TMPFILE"
+        rendercv render "$TMPFILE"
+        mkdir -p build/resume
+        cp "$TMPDIR/rendercv_output/"* build/resume/
+        rm -rf "$TMPDIR"
       '';
     };
   };
@@ -137,7 +158,7 @@ in
     rendercv-schema = {
       enable = true;
       name = "RenderCV schema";
-      entry = "${pkgs.check-jsonschema}/bin/check-jsonschema --schemafile https://raw.githubusercontent.com/rendercv/rendercv/037e3b6f65d0b7aa448302f4796c5b186f92120a/schema.json";
+      entry = "${pkgs.check-jsonschema}/bin/check-jsonschema --schemafile https://raw.githubusercontent.com/rendercv/rendercv/refs/tags/v2.6/schema.json";
       files = "^site/resume\\.yaml$";
       language = "system";
     };

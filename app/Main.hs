@@ -52,6 +52,7 @@ import qualified Data.Map.Lazy as Map
 import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Ord (Down (Down))
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as TE
 import Data.Time (UTCTime, defaultTimeLocale, getCurrentTime, parseTimeM, parseTimeOrError)
 import Data.Time.Format.ISO8601 (iso8601Show)
 import qualified Data.Yaml as Yaml
@@ -1324,7 +1325,7 @@ calcReadTime = fromIntegral . uncurry roundUp . flip divMod 200 . length . words
 -- | build resume page
 buildResume :: Config Identity -> Action ()
 buildResume config = cacheAction ("build" :: T.Text, resumeSrcPath) $ do
-  resumeYamlBS <- liftIO $ BS.readFile resumeSrcPath
+  resumeYamlBS <- TE.encodeUtf8 . T.pack <$> readFile' resumeSrcPath
   resumeTemplate <- Slick.compileTemplate' "site/templates/resume.html"
   gitHash <- getGitHash resumeSrcPath >>= prettyGitHash config
   let resumeData = case Yaml.decodeEither' resumeYamlBS of
