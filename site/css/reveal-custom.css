@@ -6,7 +6,7 @@
 :root {
   --r-background-color: #fff;
   --r-main-font: "PragmataPro", monospace;
-  --r-main-font-size: 28px;
+  --r-main-font-size: 20px;
   --r-main-color: #000;
   --r-block-margin: 20px;
   --r-heading-margin: 0;
@@ -149,9 +149,7 @@
 
 .reveal a:hover {
   color: var(--r-link-color-hover);
-  border-bottom-style: solid;
-  text-shadow: none;
-  border: none;
+  text-decoration: none;
 }
 
 /* Lists - markdown style */
@@ -327,6 +325,11 @@
   .reveal {
     font-size: 20px;
   }
+}
+
+/* MathJax sizing */
+.reveal .MathJax {
+  font-size: 1.1em !important;
 }
 
 /* Print styles */

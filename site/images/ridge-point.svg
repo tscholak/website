@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="600" viewBox="0 0 1200 600">
+<defs>
+  <marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M 0 0 L 10 5 L 0 10 z" fill="#000"/>
+  </marker>
+</defs>
+<rect x="0" y="0" width="100%" height="100%" fill="#fff"/>
+<line x1="120" y1="510" x2="1160" y2="510" stroke="#000" stroke-width="2" marker-end="url(#arrow)"/>
+<line x1="120" y1="510" x2="120" y2="50" stroke="#000" stroke-width="2" marker-end="url(#arrow)"/>
+<line x1="120.0" y1="510" x2="120.0" y2="518" stroke="#000" stroke-width="2"/>
+<text x="120.0" y="540" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="16" fill="#000">1/4</text>
+<line x1="216.66666666666666" y1="510" x2="216.66666666666666" y2="518" stroke="#000" stroke-width="2"/>
+<text x="216.66666666666666" y="540" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="16" fill="#000">1/2</text>
+<line x1="313.3333333333333" y1="510" x2="313.3333333333333" y2="518" stroke="#000" stroke-width="2"/>
+<text x="313.3333333333333" y="540" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="16" fill="#000">1</text>
+<line x1="410.0" y1="510" x2="410.0" y2="518" stroke="#000" stroke-width="2"/>
+<text x="410.0" y="540" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="16" fill="#000">2</text>
+<line x1="506.66666666666663" y1="510" x2="506.66666666666663" y2="518" stroke="#000" stroke-width="2"/>
+<text x="506.66666666666663" y="540" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="16" fill="#000">4</text>
+<line x1="603.3333333333334" y1="510" x2="603.3333333333334" y2="518" stroke="#000" stroke-width="2"/>
+<text x="603.3333333333334" y="540" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="16" fill="#000">8</text>
+<line x1="700.0" y1="510" x2="700.0" y2="518" stroke="#000" stroke-width="2"/>
+<text x="700.0" y="540" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="16" fill="#000">16</text>
+<line x1="796.6666666666667" y1="510" x2="796.6666666666667" y2="518" stroke="#000" stroke-width="2"/>
+<text x="796.6666666666667" y="540" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="16" fill="#000">32</text>
+<line x1="893.3333333333333" y1="510" x2="893.3333333333333" y2="518" stroke="#000" stroke-width="2"/>
+<text x="893.3333333333333" y="540" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="16" fill="#000">64</text>
+<line x1="990.0" y1="510" x2="990.0" y2="518" stroke="#000" stroke-width="2"/>
+<text x="990.0" y="540" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="16" fill="#000">128</text>
+<line x1="112" y1="510.0" x2="120" y2="510.0" stroke="#000" stroke-width="2"/>
+<text x="102" y="516.0" text-anchor="end" font-family="Helvetica, Arial, sans-serif" font-size="16" fill="#000">1/4</text>
+<line x1="112" y1="443.57142857142856" x2="120" y2="443.57142857142856" stroke="#000" stroke-width="2"/>
+<text x="102" y="449.57142857142856" text-anchor="end" font-family="Helvetica, Arial, sans-serif" font-size="16" fill="#000">1/2</text>
+<line x1="112" y1="377.14285714285717" x2="120" y2="377.14285714285717" stroke="#000" stroke-width="2"/>
+<text x="102" y="383.14285714285717" text-anchor="end" font-family="Helvetica, Arial, sans-serif" font-size="16" fill="#000">1</text>
+<line x1="112" y1="310.7142857142857" x2="120" y2="310.7142857142857" stroke="#000" stroke-width="2"/>
+<text x="102" y="316.7142857142857" text-anchor="end" font-family="Helvetica, Arial, sans-serif" font-size="16" fill="#000">2</text>
+<line x1="112" y1="244.28571428571428" x2="120" y2="244.28571428571428" stroke="#000" stroke-width="2"/>
+<text x="102" y="250.28571428571428" text-anchor="end" font-family="Helvetica, Arial, sans-serif" font-size="16" fill="#000">4</text>
+<line x1="112" y1="177.85714285714283" x2="120" y2="177.85714285714283" stroke="#000" stroke-width="2"/>
+<text x="102" y="183.85714285714283" text-anchor="end" font-family="Helvetica, Arial, sans-serif" font-size="16" fill="#000">8</text>
+<line x1="112" y1="111.42857142857144" x2="120" y2="111.42857142857144" stroke="#000" stroke-width="2"/>
+<text x="102" y="117.42857142857144" text-anchor="end" font-family="Helvetica, Arial, sans-serif" font-size="16" fill="#000">16</text>
+<line x1="112" y1="45.0" x2="120" y2="45.0" stroke="#000" stroke-width="2"/>
+<text x="102" y="51.0" text-anchor="end" font-family="Helvetica, Arial, sans-serif" font-size="16" fill="#000">32</text>
+<text x="600.0" y="570" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="20" fill="#000">Operational intensity (OI) [FLOP/byte]</text>
+<text x="28" y="290.0" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="20" fill="#000" transform="rotate(-90 28 290.0)">Kernel time lower bound (T) [arb. units]</text>
+<line x1="506.66666666666663" y1="310.7142857142857" x2="990.0" y2="310.7142857142857" stroke="#000" stroke-width="4"/>
+<line x1="120.0" y1="45.0" x2="506.66666666666663" y2="310.7142857142857" stroke="#000" stroke-width="4"/>
+<line x1="506.66666666666663" y1="310.7142857142857" x2="796.6666666666667" y2="510.0" stroke="#000" stroke-width="4" stroke-dasharray="10,10" opacity="0.55"/>
+<circle cx="506.66666666666663" cy="310.7142857142857" r="6" fill="#000"/>
+<text x="516.6666666666666" y="300.7142857142857" text-anchor="start" font-family="Helvetica, Arial, sans-serif" font-size="18" fill="#000">OI*</text>
+<text x="271.3333333333333" y="154.57142857142858" text-anchor="start" font-family="Helvetica, Arial, sans-serif" font-size="18" fill="#000">HBM-bound</text>
+<text x="678.1052631578948" y="285.30833333333334" text-anchor="start" font-family="Helvetica, Arial, sans-serif" font-size="18" fill="#000">Compute-bound</text>
+<text x="291.0" y="197.92857142857144" text-anchor="start" font-family="Helvetica, Arial, sans-serif" font-size="16" fill="#000">T_mem ≈ Bytes / B_HBM ∝ 1/OI</text>
+<text x="631.3684210526316" y="296.7142857142857" text-anchor="start" font-family="Helvetica, Arial, sans-serif" font-size="16" fill="#000">T_comp ≈ FLOPs / P_peak</text>
+<line x1="410.0" y1="70" x2="410.0" y2="510" stroke="#d00" stroke-width="4" stroke-dasharray="12,12"/>
+<text x="410.0" y="60" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="18" fill="#d00">OI1</text>
+<text x="410.0" y="498" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="16" fill="#d00">2</text>
+<line x1="700.0" y1="70" x2="700.0" y2="510" stroke="#d00" stroke-width="4" stroke-dasharray="12,12"/>
+<text x="700.0" y="60" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="18" fill="#d00">OI2</text>
+<text x="700.0" y="498" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="16" fill="#d00">16</text>
+<text x="1140" y="35" text-anchor="end" font-family="Helvetica, Arial, sans-serif" font-size="16" fill="#444">(lower is better)</text>
+</svg>

@@ -116,7 +116,8 @@ markdownOptions =
                 Pandoc.Ext_fenced_code_attributes,
                 Pandoc.Ext_auto_identifiers,
                 Pandoc.Ext_fenced_divs,
-                Pandoc.Ext_link_attributes
+                Pandoc.Ext_link_attributes,
+                Pandoc.Ext_tex_math_dollars
               ],
             Pandoc.githubMarkdownExtensions
           ]
@@ -148,7 +149,8 @@ revealWriterOptions :: Pandoc.WriterOptions
 revealWriterOptions =
   Pandoc.def
     { Pandoc.writerSlideLevel = Just 2,
-      Pandoc.writerSectionDivs = True
+      Pandoc.writerSectionDivs = True,
+      Pandoc.writerHTMLMathMethod = Pandoc.MathJax ""
     }
 
 -- | convert markdown to reveal.js HTML

@@ -29,14 +29,20 @@
     <script src="/js/reveal/plugin/notes/notes.js"></script>
     <script src="/js/reveal/plugin/markdown/markdown.js"></script>
     <script src="/js/reveal/plugin/highlight/highlight.js"></script>
+    <script src="/js/reveal/plugin/math/math.js"></script>
     <script>
         // More info about initialization & config:
         // - https://revealjs.com/initialization/
         // - https://revealjs.com/config/
         Reveal.initialize({
             hash: true,
+            center: false,
+            math: {
+                mathjax: 'https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js',
+                config: 'TeX-AMS_HTML-full'
+            },
             // Learn about plugins: https://revealjs.com/plugins/
-            plugins: [ RevealMarkdown, RevealHighlight, RevealNotes ]
+            plugins: [ RevealMarkdown, RevealHighlight, RevealNotes, RevealMath.MathJax3 ]
         });
     </script>
 </body>
